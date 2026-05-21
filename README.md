@@ -84,8 +84,8 @@ Burgers
 convection_diffusion
 ```
 
-For headless/server runs, set `make_plots = false` near the top of each MATLAB
-script before running.
+The MATLAB scripts are minimal headless generators: they write `.mat` files and
+run shape checks, but do not create diagnostic figures.
 
 ## Manuscript Defaults
 
@@ -137,6 +137,19 @@ python profiling/profile_ns_overhead.py --check-only --models fno,fno_film
 
 Do not run full training or full evaluation locally unless the required data,
 weights, and CUDA resources are available.
+
+To inspect GPU ids before using a launcher:
+
+```bash
+python scripts/launch_burgers_fno.py --list-gpus
+python scripts/launch_convdiff_fno.py --list-gpus
+python scripts/launch_ns_extra_backbones.py --list-gpus
+```
+
+Launchers print the PyTorch-visible GPU mapping with
+`CUDA_DEVICE_ORDER=PCI_BUS_ID`. They accept any CUDA GPU by default and only
+filter by model name if `--require-gpu-name` is passed, for example
+`--require-gpu-name A100`.
 
 ## Representative Commands
 

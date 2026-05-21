@@ -9,11 +9,8 @@
 %   dt:          variable lag intervals
 %   trajectories: state snapshots, shape (N, 64, 64, 1, T)
 %
-% Set make_plots=false below for headless/server runs.
-
-clear; clc; close all;
+clear; clc;
 rng(42);
-make_plots = true;
 
 script_path = mfilename('fullpath');
 script_dir = fileparts(script_path);
@@ -44,8 +41,9 @@ fprintf('  advection: (%.1f, %.1f)\n', alpha1, alpha2);
 fprintf('  diffusion: (%.1f, %.1f)\n', sigma1, sigma2);
 
 %% Grid and Fourier modes
-x = linspace(-pi, pi, N);
-y = linspace(-pi, pi, N);
+dx = L / N;
+x = -pi + (0:N-1) * dx;
+y = -pi + (0:N-1) * dx;
 [X, Y] = meshgrid(x, y);
 
 coordinates = zeros(N, N, 2);
@@ -55,6 +53,8 @@ coordinates(:, :, 2) = Y;
 kx = (2 * pi / L) * [0:N/2-1, -N/2:-1];
 ky = (2 * pi / L) * [0:N/2-1, -N/2:-1];
 [KX, KY] = meshgrid(kx, ky);
+assert(abs(x(2) - x(1) - dx) < 10 * eps(dx), ...
+    'Periodic grid spacing mismatch.');
 
 %% Training set
 fprintf('\nGenerating training data (%d trajectories, %d snapshots each)...\n', ...
@@ -84,6 +84,11 @@ fprintf('Training data shapes:\n');
 fprintf('  dt: %s\n', mat2str(size(dt)));
 fprintf('  trajectories: %s\n', mat2str(size(trajectories)));
 save(fullfile(script_dir, 'train_data.mat'), 'coordinates', 'dt', 'trajectories');
+assert_shape(size(coordinates), [N, N, 2], 'train coordinates');
+assert_shape(size(dt), [n_train_trajectories, train_steps], 'train dt');
+assert_shape(size(trajectories), ...
+    [n_train_trajectories, N, N, 1, train_steps + 1], ...
+    'train trajectories');
 
 clear dt trajectories;
 
@@ -115,42 +120,25 @@ fprintf('Test data shapes:\n');
 fprintf('  dt: %s\n', mat2str(size(dt)));
 fprintf('  trajectories: %s\n', mat2str(size(trajectories)));
 save(fullfile(script_dir, 'test_data.mat'), 'dt', 'trajectories');
-
-%% Verification and diagnostic plots
-fprintf('\nVerifying generated files...\n');
-train_data = load(fullfile(script_dir, 'train_data.mat'));
-test_data = load(fullfile(script_dir, 'test_data.mat'));
-
-fprintf('Training data:\n');
-fprintf('  coordinates: %s\n', mat2str(size(train_data.coordinates)));
-fprintf('  dt: %s\n', mat2str(size(train_data.dt)));
-fprintf('  trajectories: %s\n', mat2str(size(train_data.trajectories)));
-
-fprintf('Test data:\n');
-fprintf('  dt: %s\n', mat2str(size(test_data.dt)));
-fprintf('  trajectories: %s\n', mat2str(size(test_data.trajectories)));
-
-fprintf('Value ranges:\n');
-fprintf('  train: [%.2e, %.2f]\n', ...
-    min(train_data.trajectories(:)), max(train_data.trajectories(:)));
-fprintf('  test:  [%.2e, %.2f]\n', ...
-    min(test_data.trajectories(:)), max(test_data.trajectories(:)));
-
-if make_plots
-    plot_diagnostics(train_data, test_data, x, y, N, script_dir);
-end
+assert_shape(size(dt), [n_test_trajectories, test_steps], 'test dt');
+assert_shape(size(trajectories), ...
+    [n_test_trajectories, N, N, 1, test_steps + 1], ...
+    'test trajectories');
 
 fprintf('\nData generation complete.\n');
 fprintf('Output directory: %s\n', script_dir);
 fprintf('Generated files:\n');
 fprintf('  train_data.mat\n');
 fprintf('  test_data.mat\n');
-if make_plots
-    fprintf('  simplified_visualization.png\n');
-    fprintf('  energy_evolution.png\n');
-end
 
 %% Local helper functions
+function assert_shape(actual, expected, name)
+    assert(isequal(actual, expected), ...
+        '%s shape mismatch. Expected %s, got %s.', ...
+        name, mat2str(expected), mat2str(actual));
+    fprintf('Verified %s shape: %s\n', name, mat2str(actual));
+end
+
 function u_new = exact_spectral_evolution(u, dt, alpha1, alpha2, sigma1, sigma2, KX, KY)
     u_hat = fft2(u);
     linear_operator = -1i * (alpha1 .* KX + alpha2 .* KY) ...
@@ -208,80 +196,5 @@ function u0 = generate_random_initial_condition(N, n_modes, amplitude_scale)
         u0 = u0 / current_max * amplitude_scale;
     else
         u0 = amplitude_scale * randn(N, N) * 0.1;
-    end
-end
-
-function plot_diagnostics(train_data, test_data, x, y, N, output_dir)
-    traj_indices = [1, 2];
-
-    figure('Position', [100, 100, 1200, 400]);
-    for i = 1:2
-        traj_idx = traj_indices(i);
-
-        subplot(2, 4, (i - 1) * 4 + 1);
-        u0 = squeeze(train_data.trajectories(traj_idx, :, :, 1, 1));
-        imagesc(x, y, u0);
-        colorbar; axis equal tight;
-        title(sprintf('Train %d: initial', traj_idx));
-        xlabel('x'); ylabel('y');
-
-        subplot(2, 4, (i - 1) * 4 + 2);
-        u_final = squeeze(train_data.trajectories(traj_idx, :, :, 1, end));
-        imagesc(x, y, u_final);
-        colorbar; axis equal tight;
-        title(sprintf('Train %d: final', traj_idx));
-        xlabel('x'); ylabel('y');
-
-        subplot(2, 4, (i - 1) * 4 + 3);
-        u0_test = squeeze(test_data.trajectories(traj_idx, :, :, 1, 1));
-        imagesc(x, y, u0_test);
-        colorbar; axis equal tight;
-        title(sprintf('Test %d: initial', traj_idx));
-        xlabel('x'); ylabel('y');
-
-        subplot(2, 4, (i - 1) * 4 + 4);
-        u_final_test = squeeze(test_data.trajectories(traj_idx, :, :, 1, end));
-        imagesc(x, y, u_final_test);
-        colorbar; axis equal tight;
-        title(sprintf('Test %d: final', traj_idx));
-        xlabel('x'); ylabel('y');
-    end
-    colormap(jet);
-    saveas(gcf, fullfile(output_dir, 'simplified_visualization.png'));
-
-    figure('Position', [100, 100, 800, 600]);
-    for i = 1:2
-        traj_idx = traj_indices(i);
-
-        subplot(2, 2, (i - 1) * 2 + 1);
-        [time_train, energy_train] = energy_curve(train_data, traj_idx, N);
-        plot(time_train, energy_train, 'b-', 'LineWidth', 2);
-        xlabel('time'); ylabel('mean energy');
-        title(sprintf('Train %d: energy', traj_idx));
-        grid on;
-
-        subplot(2, 2, (i - 1) * 2 + 2);
-        [time_test, energy_test] = energy_curve(test_data, traj_idx, N);
-        plot(time_test, energy_test, 'r-', 'LineWidth', 2);
-        xlabel('time'); ylabel('mean energy');
-        title(sprintf('Test %d: energy', traj_idx));
-        grid on;
-    end
-    saveas(gcf, fullfile(output_dir, 'energy_evolution.png'));
-end
-
-function [time_points, energy] = energy_curve(data, traj_idx, N)
-    n_steps = size(data.trajectories, 5);
-    energy = zeros(n_steps, 1);
-    time_points = zeros(n_steps, 1);
-
-    current_time = 0;
-    for step = 1:n_steps
-        u_current = squeeze(data.trajectories(traj_idx, :, :, 1, step));
-        energy(step) = sum(u_current(:).^2) / (N * N);
-        time_points(step) = current_time;
-        if step < n_steps && step <= size(data.dt, 2)
-            current_time = current_time + data.dt(traj_idx, step);
-        end
     end
 end

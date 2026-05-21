@@ -68,13 +68,57 @@ else:
     return available, name
 
 
-def validate_gpus(gpus, require_a100=True):
+def list_available_gpus():
+    """
+    Print PyTorch-visible CUDA devices under CUDA_DEVICE_ORDER=PCI_BUS_ID.
+    """
+    env = os.environ.copy()
+    env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+    code = r"""
+import torch
+print(torch.cuda.is_available())
+print(torch.cuda.device_count() if torch.cuda.is_available() else 0)
+if torch.cuda.is_available():
+    for i in range(torch.cuda.device_count()):
+        print(f"{i}\t{torch.cuda.get_device_name(i)}")
+"""
+
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+
+    print("=" * 80, flush=True)
+    print("Available CUDA devices with CUDA_DEVICE_ORDER=PCI_BUS_ID", flush=True)
+    if proc.returncode != 0:
+        print("GPU listing failed:", proc.stderr.strip(), flush=True)
+        print("=" * 80, flush=True)
+        return
+
+    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    available = lines[0] == "True" if lines else False
+    count = int(lines[1]) if len(lines) >= 2 and lines[1].isdigit() else 0
+    print("torch.cuda.is_available =", available, flush=True)
+    print("torch.cuda.device_count =", count, flush=True)
+    for line in lines[2:]:
+        idx, name = line.split("\t", 1)
+        print(f"  --gpus id {idx}: {name}", flush=True)
+    print("=" * 80, flush=True)
+
+
+def validate_gpus(gpus, required_name=""):
     """
     Validate CUDA mapping before launching jobs.
     """
     print("=" * 80, flush=True)
     print("Validating CUDA device mapping", flush=True)
     print("CUDA_DEVICE_ORDER will be set to PCI_BUS_ID for all child jobs.", flush=True)
+    if required_name:
+        print(f"Required GPU name substring: {required_name}", flush=True)
 
     valid = []
     rejected = []
@@ -87,7 +131,7 @@ def validate_gpus(gpus, require_a100=True):
             rejected.append((gpu, name))
             continue
 
-        if require_a100 and "A100" not in name:
+        if required_name and required_name not in name:
             rejected.append((gpu, name))
             continue
 
@@ -101,7 +145,7 @@ def validate_gpus(gpus, require_a100=True):
     if not valid:
         raise RuntimeError(
             "No valid GPU remains after validation. "
-            "Check CUDA_VISIBLE_DEVICES mapping or use --allow-non-a100."
+            "Check CUDA_VISIBLE_DEVICES mapping or relax --require-gpu-name."
         )
 
     print("Valid GPU ids:", valid, flush=True)
@@ -113,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=str, required=True)
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
-    parser.add_argument("--gpus", type=str, required=True)
+    parser.add_argument("--gpus", type=str, default="")
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--data-dir", type=str, default=os.path.join("data"))
@@ -126,11 +170,21 @@ def main():
         help="Print planned jobs and child commands without validating GPUs or launching.",
     )
 
-    # By default, reject T1000 / unexpected GPUs.
     parser.add_argument(
         "--allow-non-a100",
         action="store_true",
-        help="Allow GPUs whose visible name does not contain A100.",
+        help="Deprecated no-op. Launchers no longer filter GPU model by default.",
+    )
+    parser.add_argument(
+        "--require-gpu-name",
+        type=str,
+        default="",
+        help="Optional substring filter for GPU names, for example A100 or H100.",
+    )
+    parser.add_argument(
+        "--list-gpus",
+        action="store_true",
+        help="List PyTorch-visible CUDA devices and exit.",
     )
 
     # Only validate and print mapping, then exit.
@@ -144,7 +198,15 @@ def main():
 
     seeds = parse_int_list(args.seeds)
     models = parse_str_list(args.models)
-    requested_gpus = parse_int_list(args.gpus)
+    requested_gpus = parse_int_list(args.gpus) if args.gpus else []
+
+    if args.list_gpus:
+        list_available_gpus()
+        return
+
+    if not requested_gpus:
+        list_available_gpus()
+        raise SystemExit("Please pass one or more GPU ids with --gpus, for example --gpus 0,1.")
 
     if args.dry_run:
         print("=" * 80, flush=True)
@@ -180,7 +242,7 @@ def main():
     # Validate actual PyTorch-visible mapping.
     gpus = validate_gpus(
         requested_gpus,
-        require_a100=not args.allow_non_a100,
+        required_name=args.require_gpu_name,
     )
 
     if args.check_gpus_only:

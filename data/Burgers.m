@@ -9,11 +9,8 @@
 %   dt:          variable lag intervals
 %   trajectories: state snapshots, shape (N, 64, 1, T)
 %
-% Set make_plots=false below for headless/server runs.
-
-clear; close all; clc;
+clear; clc;
 rng(42);
-make_plots = true;
 
 script_path = mfilename('fullpath');
 script_dir = fileparts(script_path);
@@ -96,6 +93,10 @@ end
 dt = dt_train;
 save(fullfile(script_dir, 'BurgersOSG_train.mat'), ...
     'coordinates', 'dt', 'trajectories', '-v7');
+assert_shape(size(coordinates), [L_coarse, 1], 'train coordinates');
+assert_shape(size(dt), [N_train, T_train - 1], 'train dt');
+assert_shape(size(trajectories), [N_train, L_coarse, D, T_train], ...
+    'train trajectories');
 fprintf('Training data saved.\n');
 
 %% Test set
@@ -149,20 +150,22 @@ end
 dt = dt_test;
 save(fullfile(script_dir, 'BurgersOSG_test.mat'), ...
     'coordinates', 'dt', 'trajectories', '-v7');
+assert_shape(size(coordinates), [L_coarse, 1], 'test coordinates');
+assert_shape(size(dt), [N_test, T_test - 1], 'test dt');
+assert_shape(size(trajectories), [N_test, L_coarse, D, T_test], ...
+    'test trajectories');
 fprintf('Test data saved.\n');
 
-%% Optional diagnostic plot for the shock test case
-if make_plots
-    t_last_case = [0; cumsum(dt_test(end, :)')];
-    plot_waveforms_at_times( ...
-        trajectories, ...
-        x_coarse, ...
-        t_last_case, ...
-        fullfile(script_dir, 'BurgersOSG_Shock_Waveforms.png') ...
-    );
-end
+fprintf('Burgers data generation complete.\n');
 
 %% Local helper functions
+function assert_shape(actual, expected, name)
+    assert(isequal(actual, expected), ...
+        '%s shape mismatch. Expected %s, got %s.', ...
+        name, mat2str(expected), mat2str(actual));
+    fprintf('Verified %s shape: %s\n', name, mat2str(actual));
+end
+
 function [a0, an, bn] = sample_fourier_coefficients(N, N_modes)
     a0 = -0.5 + rand(N, 1);
     an = zeros(N, N_modes);
@@ -199,50 +202,4 @@ function u_next = RK4_LF_step(u, dt, dx)
     k4 = burgers_rhs_LF(u + dt * k3, dx);
     u_next = u + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4);
     u_next = max(min(u_next, 10), -10);
-end
-
-function plot_waveforms_at_times(trajectories, x, t_points, save_filename)
-    u_traj = squeeze(trajectories(end, :, 1, :));
-    n_times = length(t_points);
-    indices = unique([1, round(linspace(2, n_times, 5))]);
-    if indices(end) ~= n_times
-        indices = [indices, n_times];
-    end
-    plot_times = t_points(indices);
-    colors = lines(length(indices));
-
-    figure('Position', [100, 100, 1200, 700], 'Color', 'w');
-    for i = 1:length(indices)
-        subplot(2, 3, i);
-        idx = indices(i);
-        plot(x, u_traj(:, idx), 'LineWidth', 2, 'Color', colors(i, :));
-        hold on; grid on;
-        title(sprintf('t = %.2f', plot_times(i)));
-        xlabel('x'); ylabel('u(x)'); ylim([-2.2, 2.2]);
-        if plot_times(i) > 0.5
-            [~, max_idx] = max(abs(gradient(u_traj(:, idx), x(2) - x(1))));
-            plot(x(max_idx), u_traj(max_idx, idx), ...
-                'rv', 'MarkerSize', 8, 'MarkerFaceColor', 'r');
-        end
-    end
-
-    subplot(2, 3, [4 6]);
-    for i = 1:length(indices)
-        idx = indices(i);
-        plot(x, u_traj(:, idx), ...
-            'LineWidth', 1.5, ...
-            'Color', colors(i, :), ...
-            'DisplayName', sprintf('t = %.2f', plot_times(i)));
-        hold on;
-    end
-    grid on; xlabel('x'); ylabel('u(x)'); title('Time Evolution Overlay');
-    legend('Location', 'best'); ylim([-2.2, 2.2]);
-    sgtitle('Burgers Equation Shock Formation (-sin(x))', ...
-        'FontSize', 14, 'FontWeight', 'bold');
-
-    if ~isempty(save_filename)
-        saveas(gcf, save_filename);
-        fprintf('Plot saved: %s\n', save_filename);
-    end
-    drawnow;
 end
