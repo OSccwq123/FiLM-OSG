@@ -1,0 +1,49 @@
+FiLM-OSG reproducibility code
+
+This repository contains reproducibility code for the FiLM-OSG manuscript.
+
+DUE attribution
+---------------
+
+Portions of the local `film_osg` package are adapted from DUE:
+
+    AI4Equations/DUE
+    https://github.com/AI4Equations/due
+    License: LGPL-2.1
+
+DUE is prior work from our group. The local copies are included to make the
+FiLM-OSG reproducibility scripts runnable without requiring the external `due`
+package on the primary execution path, while preserving compatibility with
+historical DUE-style APIs and model files.
+
+Local modules adapted from DUE include:
+
+    film_osg/datasets/pde.py
+    film_osg/models/pde.py
+    film_osg/models/pde_osg.py
+    film_osg/networks/nn.py
+    film_osg/networks/fno.py
+    film_osg/utils.py
+
+The extra-backbone module:
+
+    film_osg/networks/osg_extra_backbones.py
+
+is local FiLM-OSG experiment code, but it intentionally follows the DUE-style
+network interface so those variants can be trained and evaluated through the
+same OSG-compatible wrappers.
+
+FNO reference
+-------------
+
+The FNO implementation also follows the public neuraloperator Fourier neural
+operator reference:
+
+    https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py
+
+Scope of local changes
+----------------------
+
+These attributions document code provenance only. The reproducibility cleanup
+does not change the manuscript protocol, model logic, hyperparameters, seed
+settings, metric formulas, or reported experimental conclusions.
