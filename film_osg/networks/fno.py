@@ -1,4 +1,11 @@
-""" This is adapted from the implementation of Fourier neural operator. Reference to https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py"""
+"""FNO backbones for FiLM-OSG reproducibility experiments.
+
+Portions of this module are adapted from the DUE project:
+https://github.com/AI4Equations/due
+DUE is distributed under the LGPL-2.1 license. The Fourier neural operator
+implementation also follows the public neuraloperator reference:
+https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py
+"""
 
 import torch
 torch.set_default_dtype(torch.float32)

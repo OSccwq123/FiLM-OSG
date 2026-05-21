@@ -1,3 +1,11 @@
+"""Utility functions for FiLM-OSG reproducibility experiments.
+
+Portions of this module are adapted from the DUE project:
+https://github.com/AI4Equations/due
+DUE is distributed under the LGPL-2.1 license. Local changes keep the utility
+surface needed by the reproduced OSG/FiLM-OSG scripts.
+"""
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt

@@ -21,7 +21,8 @@ The root-level `fno.py`, `pde.py`, `pde_osg.py`, `utils.py`,
 snapshots. Active scripts now prefer the local `film_osg` package and retain
 `due` as a fallback for older environments and historical model files. See
 `docs/due_dependency_minimization.md` for the dependency audit and migration
-plan.
+plan. See `docs/third_party_attribution.md` for attribution of local modules
+adapted from AI4Equations/DUE and related FNO reference code.
 
 ## Manuscript Defaults
 

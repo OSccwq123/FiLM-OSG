@@ -1,3 +1,11 @@
+"""PDE training wrapper for FiLM-OSG reproducibility experiments.
+
+Portions of this module are adapted from the DUE project:
+https://github.com/AI4Equations/due
+DUE is distributed under the LGPL-2.1 license. Local changes here keep the
+training interface compatible with the reproduced OSG/FiLM-OSG scripts.
+"""
+
 import os
 from numpy import savetxt
 from scipy.io import savemat
@@ -147,7 +155,6 @@ class PDE:
 
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
-
 
 
 

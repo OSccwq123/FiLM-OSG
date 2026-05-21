@@ -1,3 +1,11 @@
+"""OSG-aware PDE training wrapper for FiLM-OSG reproducibility experiments.
+
+Portions of this module are adapted from the DUE project:
+https://github.com/AI4Equations/due
+DUE is distributed under the LGPL-2.1 license. Local changes here preserve the
+semigroup-aware training interface used by the FiLM-OSG experiments.
+"""
+
 from time import time
 from ..utils import *
 from .pde import PDE

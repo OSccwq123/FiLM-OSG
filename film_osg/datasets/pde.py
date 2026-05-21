@@ -1,3 +1,11 @@
+"""PDE dataset loaders for FiLM-OSG reproducibility experiments.
+
+Portions of this module are adapted from the DUE project:
+https://github.com/AI4Equations/due
+DUE is distributed under the LGPL-2.1 license. Local changes here keep the
+original dataset API while adding OSG/FiLM-OSG reproducibility support.
+"""
+
 import numpy as np
 from scipy.io import loadmat
 

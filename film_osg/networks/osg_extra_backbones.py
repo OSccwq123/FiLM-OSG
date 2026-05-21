@@ -1,8 +1,10 @@
 """
 OSG-compatible extra backbones for FiLM-OSG experiments on 2D regular-grid PDE data.
 
-Place this file at:
-    due/networks/osg_extra_backbones.py
+This module is local FiLM-OSG experiment code, but it intentionally preserves
+the DUE-style network interface and imports the local DUE-derived base class.
+The DUE project is available at https://github.com/AI4Equations/due and is
+distributed under the LGPL-2.1 license.
 
 It provides paired direct-lag and FiLM-conditioned variants:
 
