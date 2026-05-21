@@ -1,4 +1,4 @@
-"""Compatibility helpers for reducing reliance on the external due package."""
+"""Compatibility helpers for loading historical DUE-path model files."""
 
 from __future__ import annotations
 
@@ -17,16 +17,10 @@ def _ensure_module(name: str) -> types.ModuleType:
 def install_due_pickle_aliases() -> str:
     """Map common due module names to local film_osg modules for torch.load.
 
-    This lets newly organized environments load many models pickled with the
-    old due.networks / due.models module paths, while still preserving the
-    normal due package if it is installed.
+    This lets evaluation scripts load model files that were pickled with old
+    `due.networks` / `due.models` module paths without importing the external
+    `due` package.
     """
-
-    try:
-        import due  # noqa: F401
-        return "due-installed-no-local-aliases"
-    except ImportError:
-        pass
 
     import film_osg.datasets.pde as local_dataset_pde
     import film_osg.models.pde as local_model_pde

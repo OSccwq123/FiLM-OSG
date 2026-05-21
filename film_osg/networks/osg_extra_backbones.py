@@ -20,7 +20,7 @@ Design contract:
       rollout style as the existing osg_fno2d implementation.
 
 Important implementation note:
-    due.utils.get_activation("gelu") may return torch.nn.functional.gelu,
+    The DUE-style get_activation("gelu") helper may return torch.nn.functional.gelu,
     i.e. a function, not a torch.nn.Module. Therefore, whenever an activation
     is inserted into torch.nn.Sequential, we wrap it with ActivationModule.
 """

@@ -358,7 +358,7 @@ def main():
     print("=" * 80, flush=True)
 
     if args.check_only or args.dry_run:
-        print("Check-only mode: no .mat files, due imports, or model weights will be loaded.", flush=True)
+        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
         print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
         print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
         for model_name in models:

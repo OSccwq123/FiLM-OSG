@@ -76,14 +76,9 @@ def make_config(
 
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
-    try:
-        from film_osg.networks.fno import osg_fno2d, osg_fno2d_with_film
-        import_source = "film_osg"
-    except ImportError:
-        from due.networks.fno import osg_fno2d, osg_fno2d_with_film
-        import_source = "due"
+    from film_osg.networks.fno import osg_fno2d, osg_fno2d_with_film
 
-    print("network_import_source =", import_source, flush=True)
+    print("network_import_source = film_osg", flush=True)
 
     if model_name == "fno":
         return osg_fno2d(
@@ -136,19 +131,13 @@ def train_one(
         print("test_path =", TEST_PATH, flush=True)
         print("save_path =", save_path, flush=True)
         print("config =", config, flush=True)
-        print("No due imports, data loading, directory writes, or training were run.", flush=True)
+        print("No data loading, directory writes, or training were run.", flush=True)
         return
 
-    try:
-        from film_osg.datasets.pde import pde_dataset_osg
-        from film_osg.models.pde_osg import PDE_osg
-        runtime_import_source = "film_osg"
-    except ImportError:
-        from due.datasets.pde import pde_dataset_osg
-        from due.models.pde_osg import PDE_osg
-        runtime_import_source = "due"
+    from film_osg.datasets.pde import pde_dataset_osg
+    from film_osg.models.pde_osg import PDE_osg
 
-    print("dataset_solver_import_source =", runtime_import_source, flush=True)
+    print("dataset_solver_import_source = film_osg", flush=True)
 
     set_seed(seed)
 

@@ -2,8 +2,8 @@
 
 ## Current State
 
-The active training, evaluation, and profiling entrypoints now prefer local
-`film_osg` modules and retain `due` only as a fallback for compatibility.
+The active training, evaluation, and profiling entrypoints use local `film_osg`
+modules and do not require the external `due` package.
 
 Local replacements added:
 
@@ -19,29 +19,29 @@ Local replacements added:
 
 ## Remaining DUE Surface
 
-Active scripts still keep fallback imports from `due` so historical environments
-and old pickled models can keep working. These fallbacks should not be removed
-until old result directories and server environments are checked.
+Active scripts no longer import from external `due`. Evaluation keeps a local
+pickle alias shim so model files saved under old `due.*` module paths can be
+loaded through local `film_osg` modules.
 
 Archived scripts in `scripts/archive/` still contain direct `due` imports by
 design; they are retained for provenance and are not active entrypoints.
 
 ## Migration Behavior
 
-Training/profiling import order:
+Training/profiling import behavior:
 
-1. Try `film_osg.*`.
-2. Fall back to `due.*` only if the local import fails.
+1. Import `film_osg.*`.
+2. Fail fast if the local package is incomplete, rather than falling back to
+   external `due`.
 
 Evaluation loading:
 
-1. Install local aliases for common `due.*` module names if `due` is absent.
+1. Install local aliases for common `due.*` module names.
 2. Load models with `torch.load`.
-3. If `due` is installed, leave it untouched so old environments behave as
-   before.
+3. Historical `due.*` pickle paths resolve to local `film_osg` modules.
 
-This preserves old weight compatibility while allowing new smoke runs to avoid
-the external `due` package for the code paths now available locally.
+This preserves old weight compatibility while avoiding the external `due`
+package for active code paths.
 
 ## Validation Checklist
 
@@ -66,9 +66,8 @@ python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag localpkg_smoke 
 
 ## Next Steps
 
-- Keep the `due` fallback until all old `.pt`/`model` files needed for the
-  paper have been loaded successfully through `film_osg.compat`.
 - If any future script imports another `due.*` module, copy that source into
-  `film_osg` and update this audit before removing the fallback.
-- Once all smoke and seed-0 reproduction runs pass without external `due`, make
-  `due` fallback optional behind a documented compatibility flag.
+  `film_osg` and update this audit instead of adding a new external `due`
+  dependency.
+- Keep DUE as provenance/background attribution in `NOTICE` and
+  `docs/third_party_attribution.md`.

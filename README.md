@@ -18,8 +18,9 @@ weights, predictions, or result tables, so local checks should prefer `--help`,
 
 The root-level `fno.py`, `pde.py`, `pde_osg.py`, `utils.py`,
 `osg_extra_backbones.py`, and `__init__.py` are retained as compatibility/source
-snapshots. Active scripts now prefer the local `film_osg` package and retain
-`due` as a fallback for older environments and historical model files. See
+snapshots. Active scripts use the local `film_osg` package and do not require
+the external `due` package. Historical DUE module paths are handled through
+local pickle aliases when loading older model files. See
 `docs/due_dependency_minimization.md` for the dependency audit and migration
 plan. See `docs/third_party_attribution.md` for attribution of local modules
 adapted from AI4Equations/DUE and related FNO reference code; the repository
@@ -48,7 +49,7 @@ Additional Navier--Stokes diagnostics:
 ## Local Checks
 
 These commands should not require CUDA, large `.mat` files, model weights, or
-`due` imports:
+the external `due` package:
 
 ```bash
 python train/run_burgers_fno.py --help
@@ -74,7 +75,7 @@ python profiling/profile_ns_overhead.py --check-only --models fno,fno_film
 ```
 
 Do not run full training or full evaluation locally unless the required data,
-weights, `due` package, and CUDA resources are available.
+weights, and CUDA resources are available.
 
 ## Representative Commands
 
