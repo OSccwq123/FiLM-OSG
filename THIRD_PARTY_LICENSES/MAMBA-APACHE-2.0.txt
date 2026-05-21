@@ -1,0 +1,27 @@
+state-spaces/mamba optional dependency placeholder
+=================================================
+
+Upstream repository:
+
+    https://github.com/state-spaces/mamba
+
+Observed upstream license:
+
+    Apache-2.0
+
+Local relevance:
+
+    film_osg/networks/osg_extra_backbones.py optionally imports
+    `mamba_ssm.Mamba` when the user has installed the external package. The
+    package is not vendored in this repository.
+
+Release-review placeholder
+--------------------------
+
+Before public release, confirm with the authors and advisor whether optional
+dependency attribution should include the complete Apache-2.0 license text,
+installation notes, or citation text.
+
+This placeholder does not select the top-level license for the FiLM-OSG
+reproducibility repository.
+

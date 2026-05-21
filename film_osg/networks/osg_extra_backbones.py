@@ -6,6 +6,12 @@ the DUE-style network interface and imports the local DUE-derived base class.
 The DUE project is available at https://github.com/AI4Equations/due and is
 distributed under the LGPL-2.1 license.
 
+The U-NO-style, Transolver-style, and MambaNO-style names describe
+OSG-adapted architecture variants inspired by the corresponding papers and
+public projects. This file does not vendor those upstream codebases. If the
+optional `mamba_ssm` package is installed, it is imported as an external
+dependency from state-spaces/mamba, which is distributed under Apache-2.0.
+
 It provides paired direct-lag and FiLM-conditioned variants:
 
     osg_uno2d / osg_uno2d_with_film

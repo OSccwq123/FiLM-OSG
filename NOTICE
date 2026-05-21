@@ -52,6 +52,25 @@ operator reference:
 
     https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py
 
+The neuraloperator project is distributed under the MIT license. See
+`THIRD_PARTY_LICENSES/NEURALOPERATOR-MIT.txt` for release-review notes.
+
+Architecture references
+-----------------------
+
+The U-NO-style, Transolver-style, and MambaNO-style modules are local
+OSG-adapted implementations intended for portability diagnostics. The names
+describe architecture inspirations; the repository does not vendor the upstream
+U-NO, Transolver, or MambaNO codebases.
+
+The optional `mamba_ssm` import, when installed by a user, is an external
+dependency from state-spaces/mamba, which is distributed under Apache-2.0. See
+`THIRD_PARTY_LICENSES/MAMBA-APACHE-2.0.txt` for release-review notes.
+
+See `THIRD_PARTY_LICENSES/ARCHITECTURE_REFERENCES.md` for citation and
+license-check placeholders for U-NO-style, Transolver-style, and MambaNO-style
+references before public release.
+
 Scope of local changes
 ----------------------
 

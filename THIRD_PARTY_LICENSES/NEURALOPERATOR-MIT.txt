@@ -1,0 +1,30 @@
+neuraloperator license placeholder
+==================================
+
+Upstream repository:
+
+    https://github.com/neuraloperator/neuraloperator
+
+Observed upstream license:
+
+    MIT
+
+Local relevance:
+
+    The local FNO implementation follows the public neuraloperator Fourier
+    neural operator reference, especially the 2D Fourier operator structure.
+
+Local files currently marked as following this reference:
+
+    film_osg/networks/fno.py
+
+Release-review placeholder
+--------------------------
+
+Before public release, confirm with the authors and advisor whether this file
+should be replaced by the complete upstream MIT license text and whether
+additional attribution or modified-file notices are needed.
+
+This placeholder does not select the top-level license for the FiLM-OSG
+reproducibility repository.
+
