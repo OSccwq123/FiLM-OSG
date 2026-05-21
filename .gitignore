@@ -1,5 +1,6 @@
 # Data and large artifacts
 *.mat
+data/*.png
 runs_*/
 eval_outputs_*/
 logs/

@@ -15,8 +15,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-TRAIN_PATH = "VorticityOSG_train.mat"
-TEST_PATH = "VorticityOSG_test.mat"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+TRAIN_FILE = "VorticityOSG_train.mat"
+TEST_FILE = "VorticityOSG_test.mat"
 
 
 DEFAULT_MODELS = [
@@ -38,6 +39,11 @@ ALL_MODELS = [
     "mambano",
     "mambano_film",
 ]
+
+
+def resolve_data_paths(data_dir: str | os.PathLike[str]):
+    data_root = Path(data_dir)
+    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
 
 
 def parse_str_list(text):
@@ -524,6 +530,7 @@ def main():
     parser.add_argument("--iters", type=int, default=200)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--save-dir", type=str, default="./overhead_outputs_ns")
+    parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--sg-mode", type=str, default="aux", choices=["none", "aux"])
     parser.add_argument("--sg-weight", type=float, default=1.0)
     parser.add_argument("--check-only", action="store_true")
@@ -532,6 +539,7 @@ def main():
     args = parser.parse_args()
 
     models = parse_str_list(args.models)
+    train_path, test_path = resolve_data_paths(args.data_dir)
 
     for m in models:
         if m not in ALL_MODELS:
@@ -541,8 +549,8 @@ def main():
         print("=" * 80, flush=True)
         print("Navier--Stokes overhead profiling check-only", flush=True)
         print("Models:", models, flush=True)
-        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
-        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
+        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
         print("batch_size:", args.batch_size, flush=True)
         print("warmup:", args.warmup, flush=True)
         print("timed_iters:", args.iters, flush=True)
@@ -572,15 +580,15 @@ def main():
 
     dataset = pde_dataset_osg(load_config)
     trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
-        TRAIN_PATH,
-        TEST_PATH,
+        train_path,
+        test_path,
     )
 
     print("=" * 80, flush=True)
     print("Navier--Stokes overhead profiling", flush=True)
     print("Models:", models, flush=True)
-    print("Train data:", TRAIN_PATH, flush=True)
-    print("Test data:", TEST_PATH, flush=True)
+    print("Train data:", train_path, flush=True)
+    print("Test data:", test_path, flush=True)
     print("trainX.shape:", trainX.shape, flush=True)
     print("trainY.shape:", trainY.shape, flush=True)
     print("batch_size:", args.batch_size, flush=True)
@@ -622,8 +630,8 @@ def main():
         json.dump(
             {
                 "benchmark": "Navier--Stokes",
-                "train_path": TRAIN_PATH,
-                "test_path": TEST_PATH,
+                "train_path": train_path,
+                "test_path": test_path,
                 "batch_size": args.batch_size,
                 "warmup": args.warmup,
                 "timed_iters": args.iters,

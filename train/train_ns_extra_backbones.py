@@ -12,8 +12,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-TRAIN_PATH = "VorticityOSG_train.mat"
-TEST_PATH = "VorticityOSG_test.mat"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+TRAIN_FILE = "VorticityOSG_train.mat"
+TEST_FILE = "VorticityOSG_test.mat"
 
 
 MODEL_CHOICES = [
@@ -24,6 +25,11 @@ MODEL_CHOICES = [
     "transolver",
     "transolver_film",
 ]
+
+
+def resolve_data_paths(data_dir: str | os.PathLike[str]):
+    data_root = Path(data_dir)
+    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
 
 
 def set_seed(seed: int):
@@ -192,10 +198,12 @@ def train_one(
     overwrite: bool = True,
     save_dir: str = ".",
     device: str | None = None,
+    data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
     dry_run: bool = False,
 ):
     suffix = f"_{tag}" if tag else ""
     save_path = os.path.join(save_dir, f"runs_ns_{model_name}_seed{seed}{suffix}")
+    train_path, test_path = resolve_data_paths(data_dir)
 
     config = make_config(
         save_path=save_path,
@@ -209,8 +217,8 @@ def train_one(
         print("Navier-Stokes extra-backbone training dry run", flush=True)
         print("model =", model_name, flush=True)
         print("seed =", seed, flush=True)
-        print("train_path =", TRAIN_PATH, flush=True)
-        print("test_path =", TEST_PATH, flush=True)
+        print("train_path =", train_path, flush=True)
+        print("test_path =", test_path, flush=True)
         print("save_path =", save_path, flush=True)
         print("config =", config, flush=True)
         print("No data loading, directory writes, or training were run.", flush=True)
@@ -229,7 +237,7 @@ def train_one(
 
     dataset = pde_dataset_osg(config)
     trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
-        TRAIN_PATH, TEST_PATH
+        train_path, test_path
     )
 
     print("============================================================", flush=True)
@@ -289,6 +297,7 @@ def main():
     parser.add_argument("--tag", type=str, default="")
     parser.add_argument("--save-dir", type=str, default=".")
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-overwrite", action="store_true")
     args = parser.parse_args()
@@ -302,6 +311,7 @@ def main():
         overwrite=not args.no_overwrite,
         save_dir=args.save_dir,
         device=args.device,
+        data_dir=args.data_dir,
         dry_run=args.dry_run,
     )
 

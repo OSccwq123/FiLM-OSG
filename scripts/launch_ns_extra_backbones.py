@@ -118,6 +118,7 @@ def main():
     parser.add_argument("--gpus", type=str, required=True)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=20)
+    parser.add_argument("--data-dir", type=str, default=os.path.join("data"))
     parser.add_argument("--tag", type=str, default="")
     parser.add_argument("--no-overwrite", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=30)
@@ -155,6 +156,7 @@ def main():
         print("Requested GPUs:", requested_gpus, flush=True)
         print("Epochs:", args.epochs, flush=True)
         print("Batch size:", args.batch_size, flush=True)
+        print("Data dir:", args.data_dir, flush=True)
         print("Tag:", args.tag if args.tag else "(none)", flush=True)
         print("No GPU validation or jobs will be launched.", flush=True)
         for seed in seeds:
@@ -166,6 +168,7 @@ def main():
                     "--seed", str(seed),
                     "--epochs", str(args.epochs),
                     "--batch-size", str(args.batch_size),
+                    "--data-dir", args.data_dir,
                     "--dry-run",
                 ]
                 if args.tag:
@@ -203,6 +206,7 @@ def main():
     print("Validated GPUs:", gpus, flush=True)
     print("Epochs:", args.epochs, flush=True)
     print("Batch size:", args.batch_size, flush=True)
+    print("Data dir:", args.data_dir, flush=True)
     print("Tag:", args.tag if args.tag else "(none)", flush=True)
     print("Total jobs:", len(jobs), flush=True)
     print("=" * 80, flush=True)
@@ -243,6 +247,7 @@ def main():
                 "--seed", str(seed),
                 "--epochs", str(args.epochs),
                 "--batch-size", str(args.batch_size),
+                "--data-dir", args.data_dir,
             ]
 
             if args.tag:

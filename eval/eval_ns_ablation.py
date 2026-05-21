@@ -13,11 +13,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-TRAIN_PATH = "VorticityOSG_train.mat"
-TEST_PATH = "VorticityOSG_test.mat"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+TRAIN_FILE = "VorticityOSG_train.mat"
+TEST_FILE = "VorticityOSG_test.mat"
 
 DEFAULT_SEEDS = [0]
 DEFAULT_VARIANTS = ["direct_nosg", "film_nosg", "direct_sg", "film_sg"]
+
+
+def resolve_data_paths(data_dir: str | os.PathLike[str]):
+    data_root = Path(data_dir)
+    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
 
 
 def parse_int_list(text):
@@ -144,12 +150,14 @@ def evaluate_one_model(
     variant_name,
     seed,
     device,
+    train_path,
+    test_path,
     eval_steps=None,
     save_mat=True,
     save_dir="./eval_outputs_ns_ablation_seed012",
 ):
-    train_data = loadmat(TRAIN_PATH)
-    test_data = loadmat(TEST_PATH)
+    train_data = loadmat(train_path)
+    test_data = loadmat(test_path)
 
     from film_osg.compat import install_due_pickle_aliases
 
@@ -218,6 +226,8 @@ def evaluate_variant_family(
     variant_name,
     seeds,
     device,
+    train_path,
+    test_path,
     model_root=".",
     tag="",
     eval_steps=None,
@@ -242,6 +252,8 @@ def evaluate_variant_family(
             variant_name=variant_name,
             seed=seed,
             device=device,
+            train_path=train_path,
+            test_path=test_path,
             eval_steps=eval_steps,
             save_mat=save_mat,
             save_dir=save_dir,
@@ -381,6 +393,7 @@ def main():
     )
     parser.add_argument("--model-root", type=str, default=".")
     parser.add_argument("--tag", type=str, default="")
+    parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument(
         "--eval-steps",
         type=int,
@@ -412,6 +425,7 @@ def main():
 
     seeds = parse_int_list(args.seeds)
     variants = parse_str_list(args.variants)
+    train_path, test_path = resolve_data_paths(args.data_dir)
     eval_steps = None if args.eval_steps < 0 else args.eval_steps
 
     if args.device is None:
@@ -435,8 +449,8 @@ def main():
 
     if args.check_only or args.dry_run:
         print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
-        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
-        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
+        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
         for variant in variants:
             for seed in seeds:
                 try:
@@ -457,6 +471,8 @@ def main():
             variant_name=variant,
             seeds=seeds,
             device=device,
+            train_path=train_path,
+            test_path=test_path,
             model_root=args.model_root,
             tag=args.tag,
             eval_steps=eval_steps,

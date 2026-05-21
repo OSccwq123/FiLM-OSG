@@ -26,6 +26,67 @@ plan. See `docs/third_party_attribution.md` for attribution of local modules
 adapted from AI4Equations/DUE and related FNO reference code; the repository
 level `NOTICE` file records the same provenance in a standard notice format.
 
+## Environment
+
+The active code path does not require the external `due` package. A clean conda
+environment can be created with:
+
+```bash
+conda create -n film_osg_clean python=3.11 -y
+conda activate film_osg_clean
+python -m pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cu117
+python -m pip install -r requirements.txt
+```
+
+This matches the smoke-tested CUDA 11.7 PyTorch setup used on the server. If
+your CUDA/driver stack requires another PyTorch build, install the appropriate
+PyTorch wheel first, then run `python -m pip install -r requirements.txt`.
+
+Optional `.mat` readers for MATLAB v7.3/HDF5 files can be installed with:
+
+```bash
+python -m pip install h5py mat73
+```
+
+See `docs/environment.md` for tested versions and clean-environment checks.
+
+## Data
+
+By default, training, evaluation, and profiling scripts read benchmark files
+from `data/`. Use `--data-dir /path/to/data` to point scripts at another data
+directory.
+
+Expected files:
+
+```text
+data/BurgersOSG_train.mat
+data/BurgersOSG_test.mat
+data/train_data.mat
+data/test_data.mat
+data/VorticityOSG_train.mat
+data/VorticityOSG_test.mat
+```
+
+`data/Burgers.m` and `data/convection_diffusion.m` generate the Burgers and
+advection--diffusion `.mat` files. The Navier--Stokes `.mat` files are DUE
+benchmark data used by our group.
+
+See `data/README.md` for sizes, checksums, generation notes, and redistribution
+notes. The `.mat` files are ignored by normal git because several exceed
+GitHub's regular 100 MB file limit; use Git LFS or GitHub Release assets only
+after confirming data redistribution permission.
+
+To regenerate scripted data in MATLAB:
+
+```matlab
+cd data
+Burgers
+convection_diffusion
+```
+
+For headless/server runs, set `make_plots = false` near the top of each MATLAB
+script before running.
+
 ## Manuscript Defaults
 
 Main matched FNO comparisons:

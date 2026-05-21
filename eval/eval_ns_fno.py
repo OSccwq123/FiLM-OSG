@@ -13,8 +13,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-TRAIN_PATH = "VorticityOSG_train.mat"
-TEST_PATH = "VorticityOSG_test.mat"
+DEFAULT_DATA_DIR = REPO_ROOT / "data"
+TRAIN_FILE = "VorticityOSG_train.mat"
+TEST_FILE = "VorticityOSG_test.mat"
 
 DEFAULT_MODELS = [
     "fno",
@@ -28,6 +29,11 @@ DEFAULT_PAIRS = [
 DEFAULT_SEEDS = [0, 1, 2, 3, 4]
 DEFAULT_TAG = ""
 DEFAULT_SAVE_DIR = "./eval_outputs_ns_fno"
+
+
+def resolve_data_paths(data_dir: str | os.PathLike[str]):
+    data_root = Path(data_dir)
+    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
 
 
 def parse_int_list(text):
@@ -329,6 +335,7 @@ def main():
     parser.add_argument("--tag", type=str, default=DEFAULT_TAG)
     parser.add_argument("--model-root", type=str, default=".")
     parser.add_argument("--save-dir", type=str, default=DEFAULT_SAVE_DIR)
+    parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--eval-steps", type=int, default=None)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--skip-missing", action="store_true")
@@ -340,6 +347,7 @@ def main():
 
     models = parse_str_list(args.models)
     seeds = parse_int_list(args.seeds)
+    train_path, test_path = resolve_data_paths(args.data_dir)
 
     metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2"]
 
@@ -356,8 +364,8 @@ def main():
 
     if args.check_only or args.dry_run:
         print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
-        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
-        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
+        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
         for model_name in models:
             for seed in seeds:
                 path = model_path_for(model_name, seed, args.tag, root=args.model_root)
@@ -369,8 +377,8 @@ def main():
 
     os.makedirs(args.save_dir, exist_ok=True)
 
-    train_data = loadmat(TRAIN_PATH)
-    test_data = loadmat(TEST_PATH)
+    train_data = loadmat(train_path)
+    test_data = loadmat(test_path)
 
     print("Train trajectories shape:", train_data["trajectories"].shape, flush=True)
     print("Test trajectories shape:", test_data["trajectories"].shape, flush=True)
