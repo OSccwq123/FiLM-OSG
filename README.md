@@ -39,7 +39,7 @@ environment can be created with:
 ```bash
 conda create -n film_osg_clean python=3.11 -y
 conda activate film_osg_clean
-python -m pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cu117
+python -m pip install torch==2.0.1+cu117 --index-url https://download.pytorch.org/whl/cu117
 python -m pip install -r requirements.txt
 ```
 
@@ -111,11 +111,11 @@ The active entrypoints follow the current manuscript tables. This README records
 the execution defaults needed to reproduce the experiments; the manuscript
 remains the source of truth for interpretation and reported conclusions.
 
-| Benchmark | Grid | Train/Test snapshots | Lag protocol | Lag preprocessing |
+| Benchmark | Grid | Train/Test frames | Lag protocol | Lag preprocessing |
 | --- | --- | --- | --- | --- |
 | Burgers | `64` | `800 x 11` / `100 x 21` | train/test variable `Delta in [0.005, 0.15]` | `log10(Delta)` then affine |
 | Advection--diffusion | `64 x 64` | `100 x 51` / `100 x 100` | train/test variable `Delta in [0.005, 0.5]` | affine |
-| Navier--Stokes | `64 x 64` | `100 x 50` / `100 x 100` | train variable `Delta in [0.5, 1.5]`; test fixed `Delta = 1` | affine |
+| Navier--Stokes | `64 x 64` | `100 x 51` / `100 x 100` | train variable `Delta in [0.5, 1.5]`; test fixed `Delta = 1` | affine |
 
 | Benchmark | Backbone config | Loss | Epochs / batch | SG pairing / weight | Reported runs |
 | --- | --- | --- | --- | --- | --- |
@@ -126,14 +126,19 @@ remains the source of truth for interpretation and reported conclusions.
 Additional Navier--Stokes diagnostics use the same outer-increment OSG
 formulation:
 
-- Partition robustness: OSG-FNO and FiLM-OSG-FNO, seeds `0,1,2,3,4`.
-- Non-FNO portability: OSG-adapted U-NO-style and Transolver-style variants,
-  seeds `0,1,2`.
-- Overhead profile: FNO, U-NO-style, and Transolver-style variants on a
-  representative NS batch with batch size `20`.
-- Semigroup-loss diagnostic: direct-lag and FiLM-conditioned FNO variants, with
-  and without the auxiliary SG loss, seed `0`.
-- MambaNO-style checks are supplementary and can be selected explicitly.
+- Partition robustness uses the matched NS FNO models, seeds `0,1,2,3,4`.
+- Non-FNO portability uses OSG-adapted U-NO-style and Transolver-style direct /
+  FiLM-conditioned pairs, seeds `0,1,2`.
+- Overhead profiling compares FNO, U-NO-style, and Transolver-style direct /
+  FiLM-conditioned variants on a representative NS batch, batch size `20`.
+- Semigroup-loss diagnostics compare direct-lag and FiLM-conditioned FNO
+  variants with and without the auxiliary SG loss, seed `0`.
+- MambaNO-style checks are supplementary and can be selected explicitly; they
+  are not part of the main portability claim.
+
+The NS training `.mat` file stores the initial condition plus 50 subsequent
+frames (`51` frames total). This corresponds to 50 train lag intervals in the
+manuscript shorthand.
 
 ## Local Checks
 

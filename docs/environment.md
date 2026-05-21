@@ -35,7 +35,7 @@ conda activate film_osg_clean
 Install PyTorch. The smoke-tested setup used CUDA 11.7 wheels:
 
 ```bash
-python -m pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/cu117
+python -m pip install torch==2.0.1+cu117 --index-url https://download.pytorch.org/whl/cu117
 ```
 
 Then install the repository's minimal Python dependencies:
