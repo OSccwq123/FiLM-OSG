@@ -11,10 +11,21 @@ Portions of the local `film_osg` package are adapted from DUE:
     https://github.com/AI4Equations/due
     License: LGPL-2.1
 
-DUE is prior work from our group. The local copies are included to make the
-FiLM-OSG reproducibility scripts runnable without requiring the external `due`
-package on the primary execution path, while preserving compatibility with
-historical DUE-style APIs and model files.
+The local copies are included to make the FiLM-OSG reproducibility scripts
+runnable without requiring the external `due` package on the primary execution
+path, while preserving compatibility with historical DUE-style APIs and model
+files.
+
+Repository license status
+-------------------------
+
+The final license for this FiLM-OSG reproducibility repository is pending
+confirmation by the authors and advisor. This NOTICE records provenance and
+attribution for review; it is not a substitute for a top-level LICENSE file.
+Before public release, confirm the final repository license and any additional
+notice or source-availability requirements for files adapted from the
+LGPL-2.1-licensed AI4Equations/DUE repository. See `THIRD_PARTY_LICENSES/` for
+placeholder notes reserved for this review.
 
 Local modules adapted from DUE include:
 

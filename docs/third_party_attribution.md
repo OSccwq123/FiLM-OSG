@@ -8,7 +8,6 @@ Several local modules are adapted from the DUE project:
 
 - Repository: https://github.com/AI4Equations/due
 - License: LGPL-2.1
-- Relationship: DUE is prior work from our group.
 - Local adapted modules:
   - `film_osg/datasets/pde.py`
   - `film_osg/models/pde.py`
@@ -33,3 +32,9 @@ model logic, hyperparameters, seed settings, or metric definitions.
 
 The repository-level `NOTICE` file repeats this provenance in a compact notice
 format for redistribution.
+
+The final top-level repository license is intentionally left pending until the
+authors and advisor confirm the appropriate release terms. Before public
+release, confirm whether additional LGPL-2.1 notices, source-availability text,
+or license-file placement are needed for files adapted from AI4Equations/DUE.
+`THIRD_PARTY_LICENSES/` contains placeholders for that review.

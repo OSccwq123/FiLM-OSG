@@ -1,0 +1,35 @@
+AI4Equations/DUE license placeholder
+===================================
+
+Upstream repository:
+
+    https://github.com/AI4Equations/due
+
+Observed upstream license:
+
+    GNU Lesser General Public License v2.1 (LGPL-2.1)
+
+Authoritative license text:
+
+    https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+
+Local files currently marked as adapted from DUE:
+
+    film_osg/datasets/pde.py
+    film_osg/models/pde.py
+    film_osg/models/pde_osg.py
+    film_osg/networks/nn.py
+    film_osg/networks/fno.py
+    film_osg/utils.py
+
+Release-review placeholder
+--------------------------
+
+Before public release, confirm with the authors and advisor whether this file
+should be replaced by the complete LGPL-2.1 license text and whether additional
+notices, source-availability statements, modified-file notices, or license-file
+placement are required for the DUE-adapted files.
+
+This placeholder does not select the top-level license for the FiLM-OSG
+reproducibility repository.
+

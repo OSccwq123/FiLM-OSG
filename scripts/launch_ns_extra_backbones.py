@@ -157,7 +157,7 @@ def validate_gpus(gpus, required_name=""):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seeds", type=str, required=True)
+    parser.add_argument("--seeds", type=str, default="")
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
     parser.add_argument("--gpus", type=str, default="")
     parser.add_argument("--epochs", type=int, default=500)
@@ -198,13 +198,16 @@ def main():
 
     args = parser.parse_args()
 
-    seeds = parse_int_list(args.seeds)
+    seeds = parse_int_list(args.seeds) if args.seeds else []
     models = parse_str_list(args.models)
     requested_gpus = parse_int_list(args.gpus) if args.gpus else []
 
     if args.list_gpus:
         list_available_gpus()
         return
+
+    if not seeds:
+        raise SystemExit("Please pass one or more seeds with --seeds, for example --seeds 0,1,2.")
 
     if not requested_gpus:
         list_available_gpus()

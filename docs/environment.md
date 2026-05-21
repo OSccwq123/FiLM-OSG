@@ -4,9 +4,9 @@ This repository is organized so the active training, evaluation, and profiling
 paths use the local `film_osg` package and do not require the external `due`
 package.
 
-## Tested Server Environment
+## Tested Environment
 
-The smoke tests were run on a Linux server with:
+Smoke tests were run with:
 
 - Python `3.11.14`
 - PyTorch `2.0.1`
@@ -15,11 +15,13 @@ The smoke tests were run on a Linux server with:
 - SciPy `1.16.3`
 - Matplotlib `3.10.7`
 - PyYAML `6.0.3`
-- NVIDIA A100-SXM4-40GB
+- NVIDIA CUDA GPU with sufficient memory for the selected batch size
 
-The server reported an NVML driver/library mismatch through `nvidia-smi`, but
-PyTorch CUDA training still worked. Memory profiling should rely on PyTorch CUDA
-APIs rather than `nvidia-smi` if this warning appears.
+The launchers are not tied to a specific GPU model. They print the
+PyTorch-visible CUDA mapping and accept any available CUDA GPU by default.
+Memory profiling uses PyTorch CUDA APIs; if `nvidia-smi` reports an NVML
+driver/library warning, check whether PyTorch can still see CUDA before
+launching full experiments.
 
 ## Recommended Clean Conda Environment
 

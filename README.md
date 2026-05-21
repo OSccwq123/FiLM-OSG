@@ -1,9 +1,14 @@
 # FiLM-OSG Reproducibility Code
 
-This repository organizes the reproducibility scripts for the FiLM-OSG
-manuscript. The local machine may not have CUDA, large `.mat` datasets, model
-weights, predictions, or result tables, so local checks should prefer `--help`,
-`--dry-run`, and `--check-only` modes.
+This repository contains the reproducibility code for the FiLM-OSG manuscript:
+training entrypoints, evaluation scripts, overhead profiling, data-generation
+helpers, and lightweight launchers. The code is organized so a clean
+environment can run without the external `due` package; local compatibility
+aliases are provided for older DUE-style pickle paths.
+
+Large `.mat` datasets, model weights, predictions, and result tables are not
+tracked by normal git. On machines without the full data or CUDA resources, use
+`--help`, `--dry-run`, and `--check-only` modes first.
 
 ## Layout
 
@@ -14,7 +19,7 @@ weights, predictions, or result tables, so local checks should prefer `--help`,
 - `scripts/`: multi-GPU launchers and orchestration helpers.
 - `scripts/archive/`: historical, temporary, or one-off helper scripts retained
   for provenance.
-- `configs/`, `docs/`: placeholders for future configuration and notes.
+- `docs/`: environment notes, dependency audit, and attribution.
 
 The root-level `fno.py`, `pde.py`, `pde_osg.py`, `utils.py`,
 `osg_extra_backbones.py`, and `__init__.py` are retained as compatibility/source
@@ -38,8 +43,8 @@ python -m pip install torch==2.0.1 --index-url https://download.pytorch.org/whl/
 python -m pip install -r requirements.txt
 ```
 
-This matches the smoke-tested CUDA 11.7 PyTorch setup used on the server. If
-your CUDA/driver stack requires another PyTorch build, install the appropriate
+This matches the CUDA 11.7 PyTorch setup used for smoke tests. If your
+CUDA/driver stack requires another PyTorch build, install the appropriate
 PyTorch wheel first, then run `python -m pip install -r requirements.txt`.
 
 Optional `.mat` readers for MATLAB v7.3/HDF5 files can be installed with:
@@ -68,13 +73,26 @@ data/VorticityOSG_test.mat
 ```
 
 `data/Burgers.m` and `data/convection_diffusion.m` generate the Burgers and
-advection--diffusion `.mat` files. The Navier--Stokes `.mat` files are DUE
-benchmark data used by our group.
+advection--diffusion `.mat` files. The Navier--Stokes `.mat` files are derived
+from DUE benchmark data; keep the repository `NOTICE` and
+`docs/third_party_attribution.md` with any redistributed code or data package.
 
 See `data/README.md` for sizes, checksums, generation notes, and redistribution
 notes. The `.mat` files are ignored by normal git because several exceed
 GitHub's regular 100 MB file limit; use Git LFS or GitHub Release assets only
 after confirming data redistribution permission.
+
+## License Status
+
+The final repository license is pending confirmation by the authors and advisor.
+Until a top-level `LICENSE` file is added, treat this repository as shared for
+review and reproducibility preparation rather than as generally licensed
+software. Code adapted from AI4Equations/DUE should retain the upstream
+LGPL-2.1 attribution noted in `NOTICE` and `docs/third_party_attribution.md`;
+the final release should confirm any additional LGPL notice or source
+availability requirements before publication. `THIRD_PARTY_LICENSES/` contains
+placeholders for this release review without selecting the final top-level
+license.
 
 To regenerate scripted data in MATLAB:
 
@@ -87,25 +105,35 @@ convection_diffusion
 The MATLAB scripts are minimal headless generators: they write `.mat` files and
 run shape checks, but do not create diagnostic figures.
 
-## Manuscript Defaults
+## Manuscript Protocol Snapshot
 
-Main matched FNO comparisons:
+The active entrypoints follow the current manuscript tables. This README records
+the execution defaults needed to reproduce the experiments; the manuscript
+remains the source of truth for interpretation and reported conclusions.
 
-- Burgers: OSG-FNO vs FiLM-OSG-FNO, seeds `0,1,2`, epochs `1000`, batch size
-  `100`, SG pairing/weight `2/5.0`, multiscale log-lag preprocessing.
-- Advection--diffusion: OSG-FNO vs FiLM-OSG-FNO, seeds `0,1,2`, epochs `500`,
-  batch size `100`, SG pairing/weight `1/1.0`, affine lag preprocessing.
-- Navier--Stokes: OSG-FNO vs FiLM-OSG-FNO, seeds `0,1,2,3,4`, epochs `500`,
-  batch size `20`, SG pairing/weight `1/1.0`, affine lag preprocessing.
+| Benchmark | Grid | Train/Test snapshots | Lag protocol | Lag preprocessing |
+| --- | --- | --- | --- | --- |
+| Burgers | `64` | `800 x 11` / `100 x 21` | train/test variable `Delta in [0.005, 0.15]` | `log10(Delta)` then affine |
+| Advection--diffusion | `64 x 64` | `100 x 51` / `100 x 100` | train/test variable `Delta in [0.005, 0.5]` | affine |
+| Navier--Stokes | `64 x 64` | `100 x 50` / `100 x 100` | train variable `Delta in [0.5, 1.5]`; test fixed `Delta = 1` | affine |
 
-Additional Navier--Stokes diagnostics:
+| Benchmark | Backbone config | Loss | Epochs / batch | SG pairing / weight | Reported runs |
+| --- | --- | --- | --- | --- | --- |
+| Burgers | modes `10`, depth `3`, width `60` | MAE | `1000 / 100` | `2 / 5.0` | seeds `0,1,2` |
+| Advection--diffusion | modes `12 x 12`, depth `4`, width `20` | MAE | `500 / 100` | `1 / 1.0` | seeds `0,1,2` |
+| Navier--Stokes | modes `12 x 12`, depth `4`, width `20` | Rel-L2 | `500 / 20` | `1 / 1.0` | seeds `0,1,2,3,4` |
 
-- Partition robustness: OSG-FNO vs FiLM-OSG-FNO, seeds `0,1,2,3,4`.
-- Non-FNO portability: U-NO-style and Transolver-style variants, seeds `0,1,2`.
-- Overhead profile: representative NS batch size `20`.
-- Semigroup-loss diagnostic: direct-lag / FiLM-conditioned with and without SG,
-  seed `0`.
-- MambaNO-style variants are supplementary and can be selected explicitly.
+Additional Navier--Stokes diagnostics use the same outer-increment OSG
+formulation:
+
+- Partition robustness: OSG-FNO and FiLM-OSG-FNO, seeds `0,1,2,3,4`.
+- Non-FNO portability: OSG-adapted U-NO-style and Transolver-style variants,
+  seeds `0,1,2`.
+- Overhead profile: FNO, U-NO-style, and Transolver-style variants on a
+  representative NS batch with batch size `20`.
+- Semigroup-loss diagnostic: direct-lag and FiLM-conditioned FNO variants, with
+  and without the auxiliary SG loss, seed `0`.
+- MambaNO-style checks are supplementary and can be selected explicitly.
 
 ## Local Checks
 
@@ -150,6 +178,18 @@ Launchers print the PyTorch-visible GPU mapping with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`. They accept any CUDA GPU by default and only
 filter by model name if `--require-gpu-name` is passed, for example
 `--require-gpu-name A100`.
+
+## Reproducibility Notes
+
+- The manuscript defaults above are encoded as CLI defaults where applicable,
+  but seeds are always passed explicitly in launcher commands.
+- The data-generation scripts use fixed MATLAB RNG seeds and endpoint-excluded
+  periodic grids where FFTs are used.
+- Evaluation scripts write seedwise and summary CSV/JSON files. They do not
+  fabricate missing metrics; use `--skip-missing` only for path checks or
+  partial smoke tests.
+- Historical scripts in `scripts/archive/` are retained for provenance and are
+  not recommended as primary reproduction entrypoints.
 
 ## Representative Commands
 
