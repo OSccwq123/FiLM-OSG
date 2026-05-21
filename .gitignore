@@ -1,0 +1,18 @@
+# Data and large artifacts
+*.mat
+runs_*/
+eval_outputs_*/
+logs/
+overhead_outputs_*/
+
+# Local backup / cache
+backups/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

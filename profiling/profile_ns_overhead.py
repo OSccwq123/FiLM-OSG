@@ -4,21 +4,15 @@ import json
 import time
 import argparse
 import random
+import sys
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-from due.datasets.pde import pde_dataset_osg
-from due.networks.fno import osg_fno2d, osg_fno2d_with_film
-
-from due.networks.osg_extra_backbones import (
-    osg_uno2d,
-    osg_uno2d_with_film,
-    osg_mambano2d,
-    osg_mambano2d_with_film,
-    osg_transolver2d,
-    osg_transolver2d_with_film,
-)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 TRAIN_PATH = "VorticityOSG_train.mat"
@@ -130,6 +124,31 @@ def make_config(model_name: str, save_path: str, seed: int, batch_size: int):
 
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
+    try:
+        from film_osg.networks.fno import osg_fno2d, osg_fno2d_with_film
+        from film_osg.networks.osg_extra_backbones import (
+            osg_uno2d,
+            osg_uno2d_with_film,
+            osg_mambano2d,
+            osg_mambano2d_with_film,
+            osg_transolver2d,
+            osg_transolver2d_with_film,
+        )
+        import_source = "film_osg"
+    except ImportError:
+        from due.networks.fno import osg_fno2d, osg_fno2d_with_film
+        from due.networks.osg_extra_backbones import (
+            osg_uno2d,
+            osg_uno2d_with_film,
+            osg_mambano2d,
+            osg_mambano2d_with_film,
+            osg_transolver2d,
+            osg_transolver2d_with_film,
+        )
+        import_source = "due"
+
+    print("network_import_source =", import_source, flush=True)
+
     if model_name == "fno":
         return osg_fno2d(
             vmin=vmin,
@@ -520,6 +539,8 @@ def main():
     parser.add_argument("--save-dir", type=str, default="./overhead_outputs_ns")
     parser.add_argument("--sg-mode", type=str, default="aux", choices=["none", "aux"])
     parser.add_argument("--sg-weight", type=float, default=1.0)
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
 
@@ -528,6 +549,32 @@ def main():
     for m in models:
         if m not in ALL_MODELS:
             raise ValueError(f"Unknown model {m}. Choices: {ALL_MODELS}")
+
+    if args.check_only or args.dry_run:
+        print("=" * 80, flush=True)
+        print("Navier--Stokes overhead profiling check-only", flush=True)
+        print("Models:", models, flush=True)
+        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
+        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        print("batch_size:", args.batch_size, flush=True)
+        print("warmup:", args.warmup, flush=True)
+        print("timed_iters:", args.iters, flush=True)
+        print("sg_mode:", args.sg_mode, flush=True)
+        print("sg_weight:", args.sg_weight, flush=True)
+        print("device:", args.device, flush=True)
+        print("save_dir:", args.save_dir, flush=True)
+        print("No due imports, data loading, model instantiation, or benchmark loops were run.", flush=True)
+        print("=" * 80, flush=True)
+        return
+
+    try:
+        from film_osg.datasets.pde import pde_dataset_osg
+        dataset_import_source = "film_osg"
+    except ImportError:
+        from due.datasets.pde import pde_dataset_osg
+        dataset_import_source = "due"
+
+    print("dataset_import_source =", dataset_import_source, flush=True)
 
     os.makedirs(args.save_dir, exist_ok=True)
 

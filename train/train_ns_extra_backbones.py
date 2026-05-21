@@ -2,20 +2,14 @@ import os
 import shutil
 import random
 import argparse
+import sys
+from pathlib import Path
 import numpy as np
 import torch
 
-from due.datasets.pde import pde_dataset_osg
-from due.models.pde_osg import PDE_osg
-
-from due.networks.osg_extra_backbones import (
-    osg_uno2d,
-    osg_uno2d_with_film,
-    osg_mambano2d,
-    osg_mambano2d_with_film,
-    osg_transolver2d,
-    osg_transolver2d_with_film,
-)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 TRAIN_PATH = "VorticityOSG_train.mat"
@@ -46,7 +40,17 @@ def set_seed(seed: int):
     torch.backends.cudnn.deterministic = True
 
 
-def make_config(save_path: str, seed: int = 0, epochs: int = 500, batch_size: int = 20):
+def default_device():
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def make_config(
+    save_path: str,
+    seed: int = 0,
+    epochs: int = 500,
+    batch_size: int = 20,
+    device: str | None = None,
+):
     """
     NS configuration for OSG-compatible extra backbones.
 
@@ -60,7 +64,7 @@ def make_config(save_path: str, seed: int = 0, epochs: int = 500, batch_size: in
         "dtype": "float32",
 
         "seed": seed,
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "device": device or default_device(),
 
         "epochs": epochs,
         "batch_size": batch_size,
@@ -105,6 +109,29 @@ def make_config(save_path: str, seed: int = 0, epochs: int = 500, batch_size: in
 
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
+    try:
+        from film_osg.networks.osg_extra_backbones import (
+            osg_uno2d,
+            osg_uno2d_with_film,
+            osg_mambano2d,
+            osg_mambano2d_with_film,
+            osg_transolver2d,
+            osg_transolver2d_with_film,
+        )
+        import_source = "film_osg"
+    except ImportError:
+        from due.networks.osg_extra_backbones import (
+            osg_uno2d,
+            osg_uno2d_with_film,
+            osg_mambano2d,
+            osg_mambano2d_with_film,
+            osg_transolver2d,
+            osg_transolver2d_with_film,
+        )
+        import_source = "due"
+
+    print("network_import_source =", import_source, flush=True)
+
     if model_name == "uno":
         return osg_uno2d(
             vmin=vmin,
@@ -175,22 +202,48 @@ def train_one(
     batch_size: int = 20,
     tag: str = "",
     overwrite: bool = True,
+    save_dir: str = ".",
+    device: str | None = None,
+    dry_run: bool = False,
 ):
-    set_seed(seed)
-
     suffix = f"_{tag}" if tag else ""
-    save_path = f"./runs_ns_{model_name}_seed{seed}{suffix}"
-
-    if overwrite:
-        shutil.rmtree(save_path, ignore_errors=True)
-    os.makedirs(save_path, exist_ok=True)
+    save_path = os.path.join(save_dir, f"runs_ns_{model_name}_seed{seed}{suffix}")
 
     config = make_config(
         save_path=save_path,
         seed=seed,
         epochs=epochs,
         batch_size=batch_size,
+        device=device,
     )
+
+    if dry_run:
+        print("Navier-Stokes extra-backbone training dry run", flush=True)
+        print("model =", model_name, flush=True)
+        print("seed =", seed, flush=True)
+        print("train_path =", TRAIN_PATH, flush=True)
+        print("test_path =", TEST_PATH, flush=True)
+        print("save_path =", save_path, flush=True)
+        print("config =", config, flush=True)
+        print("No due imports, data loading, directory writes, or training were run.", flush=True)
+        return
+
+    try:
+        from film_osg.datasets.pde import pde_dataset_osg
+        from film_osg.models.pde_osg import PDE_osg
+        runtime_import_source = "film_osg"
+    except ImportError:
+        from due.datasets.pde import pde_dataset_osg
+        from due.models.pde_osg import PDE_osg
+        runtime_import_source = "due"
+
+    print("dataset_solver_import_source =", runtime_import_source, flush=True)
+
+    set_seed(seed)
+
+    if overwrite:
+        shutil.rmtree(save_path, ignore_errors=True)
+    os.makedirs(save_path, exist_ok=True)
 
     dataset = pde_dataset_osg(config)
     trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
@@ -252,6 +305,9 @@ def main():
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=20)
     parser.add_argument("--tag", type=str, default="")
+    parser.add_argument("--save-dir", type=str, default=".")
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -262,6 +318,9 @@ def main():
         batch_size=args.batch_size,
         tag=args.tag,
         overwrite=not args.no_overwrite,
+        save_dir=args.save_dir,
+        device=args.device,
+        dry_run=args.dry_run,
     )
 
 

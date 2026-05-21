@@ -2,19 +2,25 @@ import os
 import csv
 import json
 import argparse
+import sys
+from pathlib import Path
 import numpy as np
 import torch
 from scipy.io import loadmat, savemat
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-TRAIN_PATH = "train_data.mat"
-TEST_PATH = "test_data.mat"
+
+TRAIN_PATH = "BurgersOSG_train.mat"
+TEST_PATH = "BurgersOSG_test.mat"
 
 DEFAULT_MODELS = ["fno", "fno_film"]
 DEFAULT_PAIRS = [("fno", "fno_film")]
-DEFAULT_SEEDS = [0, 1, 42]
+DEFAULT_SEEDS = [0, 1, 2]
 DEFAULT_TAG = ""
-DEFAULT_SAVE_DIR = "./eval_outputs_convdiff_fno"
+DEFAULT_SAVE_DIR = "./eval_outputs_burgers_fno"
 
 
 def parse_int_list(text):
@@ -26,6 +32,10 @@ def parse_str_list(text):
 
 
 def safe_torch_load(model_path, device):
+    from film_osg.compat import install_due_pickle_aliases
+
+    compat_source = install_due_pickle_aliases()
+    print("pickle_compat_source =", compat_source, flush=True)
     try:
         return torch.load(model_path, map_location=device, weights_only=False)
     except TypeError:
@@ -34,14 +44,10 @@ def safe_torch_load(model_path, device):
 
 def model_path_for(model_name, seed, tag, root="."):
     suffix = f"_{tag}" if tag else ""
-    return os.path.join(root, f"runs_convdiff_{model_name}_seed{seed}{suffix}", "model")
+    return os.path.join(root, f"runs_burgers_{model_name}_seed{seed}{suffix}", "model")
 
 
 def compute_metrics(pred, truth, eps=1e-12):
-    """
-    pred/truth shape: (N, H, W, C, T+1) or compatible.
-    Metrics exclude initial condition at t=0.
-    """
     pred_roll = pred[..., 1:]
     true_roll = truth[..., 1:]
 
@@ -118,6 +124,7 @@ def evaluate_one_model(
         raise FileNotFoundError(f"Missing model: {path}")
 
     model = safe_torch_load(path, device)
+    print("loaded_model_class =", f"{type(model).__module__}.{type(model).__name__}", flush=True)
     model.eval()
 
     x0 = test_data["trajectories"][..., 0].astype(np.float32)
@@ -310,6 +317,8 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--skip-missing", action="store_true")
     parser.add_argument("--save-mat", action="store_true")
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
 
@@ -318,10 +327,8 @@ def main():
 
     metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2"]
 
-    os.makedirs(args.save_dir, exist_ok=True)
-
     print("=" * 80, flush=True)
-    print("Convection--diffusion FNO evaluation", flush=True)
+    print("Burgers FNO evaluation", flush=True)
     print("Models:", models, flush=True)
     print("Seeds:", seeds, flush=True)
     print("Tag:", args.tag if args.tag else "(none)", flush=True)
@@ -330,6 +337,21 @@ def main():
     print("Eval steps:", args.eval_steps if args.eval_steps is not None else "full", flush=True)
     print("Save dir:", args.save_dir, flush=True)
     print("=" * 80, flush=True)
+
+    if args.check_only or args.dry_run:
+        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
+        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
+        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        for model_name in models:
+            for seed in seeds:
+                path = model_path_for(model_name, seed, args.tag, root=args.model_root)
+                exists = os.path.exists(path)
+                print(f"Model path exists={exists}: {path}", flush=True)
+                if not exists and not args.skip_missing:
+                    raise FileNotFoundError(f"Missing model: {path}")
+        return
+
+    os.makedirs(args.save_dir, exist_ok=True)
 
     train_data = loadmat(TRAIN_PATH)
     test_data = loadmat(TEST_PATH)
@@ -395,13 +417,13 @@ def main():
         metric_keys,
     )
 
-    seedwise_csv = os.path.join(args.save_dir, "convdiff_fno_seedwise.csv")
-    summary_csv = os.path.join(args.save_dir, "convdiff_fno_summary_by_model.csv")
-    summary_json = os.path.join(args.save_dir, "convdiff_fno_summary_by_model.json")
-    paired_csv = os.path.join(args.save_dir, "convdiff_fno_paired_seedwise.csv")
-    paired_summary_csv = os.path.join(args.save_dir, "convdiff_fno_paired_summary.csv")
-    paired_json = os.path.join(args.save_dir, "convdiff_fno_paired.json")
-    missing_json = os.path.join(args.save_dir, "convdiff_fno_missing.json")
+    seedwise_csv = os.path.join(args.save_dir, "burgers_fno_seedwise.csv")
+    summary_csv = os.path.join(args.save_dir, "burgers_fno_summary_by_model.csv")
+    summary_json = os.path.join(args.save_dir, "burgers_fno_summary_by_model.json")
+    paired_csv = os.path.join(args.save_dir, "burgers_fno_paired_seedwise.csv")
+    paired_summary_csv = os.path.join(args.save_dir, "burgers_fno_paired_summary.csv")
+    paired_json = os.path.join(args.save_dir, "burgers_fno_paired.json")
+    missing_json = os.path.join(args.save_dir, "burgers_fno_missing.json")
 
     write_csv(seedwise_csv, seedwise_rows)
     write_csv(summary_csv, flatten_summary_rows(summary_by_model, metric_keys))

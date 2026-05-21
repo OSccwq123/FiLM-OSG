@@ -12,11 +12,7 @@ DEFAULT_MODELS = [
     "fno",
 ]
 
-# Physical GPU ids expected from nvidia-smi.
-# We still verify them before launching because CUDA ordering can differ.
-DEFAULT_GPUS = [0, 1, 3, 4]
-
-TRAIN_SCRIPT = "run_convdiff_fno.py"
+TRAIN_SCRIPT = os.path.join("train", "run_convdiff_fno.py")
 LOG_DIR = "./logs_convdiff_fno"
 
 
@@ -115,14 +111,19 @@ def validate_gpus(gpus, require_a100=True):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seeds", type=str, default="0,1,42")
+    parser.add_argument("--seeds", type=str, required=True)
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
-    parser.add_argument("--gpus", type=str, default=",".join(str(g) for g in DEFAULT_GPUS))
+    parser.add_argument("--gpus", type=str, required=True)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--tag", type=str, default="")
     parser.add_argument("--no-overwrite", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=30)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print planned jobs and child commands without validating GPUs or launching.",
+    )
 
     # By default, reject T1000 / unexpected GPUs.
     parser.add_argument(
@@ -143,6 +144,35 @@ def main():
     seeds = parse_int_list(args.seeds)
     models = parse_str_list(args.models)
     requested_gpus = parse_int_list(args.gpus)
+
+    if args.dry_run:
+        print("=" * 80, flush=True)
+        print("Advection-diffusion FNO launcher dry run", flush=True)
+        print("Models:", models, flush=True)
+        print("Seeds:", seeds, flush=True)
+        print("Requested GPUs:", requested_gpus, flush=True)
+        print("Epochs:", args.epochs, flush=True)
+        print("Batch size:", args.batch_size, flush=True)
+        print("Tag:", args.tag if args.tag else "(none)", flush=True)
+        print("No GPU validation or jobs will be launched.", flush=True)
+        for seed in seeds:
+            for model in models:
+                cmd = [
+                    sys.executable,
+                    TRAIN_SCRIPT,
+                    "--model", model,
+                    "--seed", str(seed),
+                    "--epochs", str(args.epochs),
+                    "--batch-size", str(args.batch_size),
+                    "--dry-run",
+                ]
+                if args.tag:
+                    cmd.extend(["--tag", args.tag])
+                if args.no_overwrite:
+                    cmd.append("--no-overwrite")
+                print("CMD:", " ".join(cmd), flush=True)
+        print("=" * 80, flush=True)
+        return
 
     # Validate actual PyTorch-visible mapping.
     gpus = validate_gpus(

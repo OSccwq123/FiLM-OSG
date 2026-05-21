@@ -2,15 +2,21 @@ import os
 import csv
 import json
 import argparse
+import sys
+from pathlib import Path
 import numpy as np
 import torch
 from scipy.io import loadmat, savemat
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 TRAIN_PATH = "VorticityOSG_train.mat"
 TEST_PATH = "VorticityOSG_test.mat"
 
-DEFAULT_SEEDS = [0, 1, 2]
+DEFAULT_SEEDS = [0]
 DEFAULT_VARIANTS = ["direct_nosg", "film_nosg", "direct_sg", "film_sg"]
 
 
@@ -22,7 +28,7 @@ def parse_str_list(text):
     return [x.strip() for x in text.split(",") if x.strip()]
 
 
-def get_model_path(variant_name, seed):
+def get_model_path(variant_name, seed, root=".", tag=""):
     """
     Path convention for NS ablation.
 
@@ -36,20 +42,21 @@ def get_model_path(variant_name, seed):
 
     Fallbacks are included in case direct_sg / film_sg were trained separately.
     """
+    suffix = f"_{tag}" if tag else ""
     candidates = {
         "direct_nosg": [
-            f"./runs_ns_direct_nosg_seed{seed}/model",
+            os.path.join(root, f"runs_ns_direct_nosg_seed{seed}{suffix}", "model"),
         ],
         "film_nosg": [
-            f"./runs_ns_film_nosg_seed{seed}/model",
+            os.path.join(root, f"runs_ns_film_nosg_seed{seed}{suffix}", "model"),
         ],
         "direct_sg": [
-            f"./runs_ns_fno_seed{seed}/model",
-            f"./runs_ns_direct_sg_seed{seed}/model",
+            os.path.join(root, f"runs_ns_fno_seed{seed}{suffix}", "model"),
+            os.path.join(root, f"runs_ns_direct_sg_seed{seed}{suffix}", "model"),
         ],
         "film_sg": [
-            f"./runs_ns_fno_film_seed{seed}/model",
-            f"./runs_ns_film_sg_seed{seed}/model",
+            os.path.join(root, f"runs_ns_fno_film_seed{seed}{suffix}", "model"),
+            os.path.join(root, f"runs_ns_film_sg_seed{seed}{suffix}", "model"),
         ],
     }
 
@@ -144,7 +151,12 @@ def evaluate_one_model(
     train_data = loadmat(TRAIN_PATH)
     test_data = loadmat(TEST_PATH)
 
+    from film_osg.compat import install_due_pickle_aliases
+
+    compat_source = install_due_pickle_aliases()
+    print("pickle_compat_source =", compat_source, flush=True)
     model = torch.load(model_path, map_location=device)
+    print("loaded_model_class =", f"{type(model).__module__}.{type(model).__name__}", flush=True)
     model.eval()
 
     x0 = test_data["trajectories"][..., 0].astype(np.float32)
@@ -206,16 +218,25 @@ def evaluate_variant_family(
     variant_name,
     seeds,
     device,
+    model_root=".",
+    tag="",
     eval_steps=None,
     save_mat=True,
     save_dir="./eval_outputs_ns_ablation_seed012",
     stable_final_threshold=1.0,
+    skip_missing=False,
 ):
     metrics_list = []
     seedwise_rows = []
 
     for seed in seeds:
-        model_path = get_model_path(variant_name, seed)
+        try:
+            model_path = get_model_path(variant_name, seed, root=model_root, tag=tag)
+        except FileNotFoundError as exc:
+            if skip_missing:
+                print("[SKIP]", exc, flush=True)
+                continue
+            raise
         metrics = evaluate_one_model(
             model_path=model_path,
             variant_name=variant_name,
@@ -230,6 +251,10 @@ def evaluate_variant_family(
         row = {"variant": variant_name, "seed": seed}
         row.update(metrics)
         seedwise_rows.append(row)
+
+    if not metrics_list:
+        print(f"No completed evaluations for {variant_name}.", flush=True)
+        return [], {}, []
 
     summary = summarize_metrics(
         metrics_list,
@@ -264,7 +289,7 @@ def evaluate_variant_family(
     print(f"Saved summary to {summary_path}")
     print(f"Saved seedwise CSV to {seedwise_path}\n")
 
-    return metrics_list, summary
+    return metrics_list, summary, seedwise_rows
 
 
 def write_seedwise_csv(path, rows):
@@ -352,8 +377,10 @@ def main():
     parser.add_argument(
         "--save-dir",
         type=str,
-        default="./eval_outputs_ns_ablation_seed012",
+        default="./eval_outputs_ns_ablation_seed0",
     )
+    parser.add_argument("--model-root", type=str, default=".")
+    parser.add_argument("--tag", type=str, default="")
     parser.add_argument(
         "--eval-steps",
         type=int,
@@ -371,6 +398,9 @@ def main():
         action="store_true",
         help="Do not save prediction .mat files.",
     )
+    parser.add_argument("--skip-missing", action="store_true")
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--stable-final-threshold",
         type=float,
@@ -395,33 +425,49 @@ def main():
     print("NS ablation evaluation", flush=True)
     print("Seeds:", seeds, flush=True)
     print("Variants:", variants, flush=True)
+    print("Tag:", args.tag if args.tag else "(none)", flush=True)
+    print("Model root:", args.model_root, flush=True)
     print("Device:", device, flush=True)
     print("Eval steps:", "full" if eval_steps is None else eval_steps, flush=True)
     print("Save dir:", args.save_dir, flush=True)
     print("Save mat:", save_mat, flush=True)
     print("=" * 80, flush=True)
 
+    if args.check_only or args.dry_run:
+        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
+        print("Train data exists:", os.path.exists(TRAIN_PATH), TRAIN_PATH, flush=True)
+        print("Test data exists:", os.path.exists(TEST_PATH), TEST_PATH, flush=True)
+        for variant in variants:
+            for seed in seeds:
+                try:
+                    path = get_model_path(variant, seed, root=args.model_root, tag=args.tag)
+                    print(f"Model path exists=True: {path}", flush=True)
+                except FileNotFoundError as exc:
+                    print("[MISSING]", exc, flush=True)
+                    if not args.skip_missing:
+                        raise
+        return
+
     all_metrics = {}
     all_summaries = {}
     all_seedwise_rows = []
 
     for variant in variants:
-        metrics_list, summary = evaluate_variant_family(
+        metrics_list, summary, seedwise_variant_rows = evaluate_variant_family(
             variant_name=variant,
             seeds=seeds,
             device=device,
+            model_root=args.model_root,
+            tag=args.tag,
             eval_steps=eval_steps,
             save_mat=save_mat,
             save_dir=args.save_dir,
             stable_final_threshold=args.stable_final_threshold,
+            skip_missing=args.skip_missing,
         )
         all_metrics[variant] = metrics_list
         all_summaries[variant] = summary
-
-        for seed, metrics in zip(seeds, metrics_list):
-            row = {"variant": variant, "seed": seed}
-            row.update(metrics)
-            all_seedwise_rows.append(row)
+        all_seedwise_rows.extend(seedwise_variant_rows)
 
     suffix = f"steps{eval_steps}" if eval_steps is not None else "full"
 
@@ -441,14 +487,14 @@ def main():
 
     paired = {}
 
-    if "direct_sg" in all_metrics and "film_sg" in all_metrics:
+    if all_metrics.get("direct_sg") and all_metrics.get("film_sg"):
         paired["film_sg_vs_direct_sg"] = paired_reduction(
             all_metrics["direct_sg"],
             all_metrics["film_sg"],
             keys,
         )
 
-    if "direct_nosg" in all_metrics and "film_nosg" in all_metrics:
+    if all_metrics.get("direct_nosg") and all_metrics.get("film_nosg"):
         paired["film_nosg_vs_direct_nosg"] = paired_reduction(
             all_metrics["direct_nosg"],
             all_metrics["film_nosg"],
