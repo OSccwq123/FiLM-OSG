@@ -9,7 +9,7 @@ training, evaluation, profiling, and lightweight launcher entrypoints for the
 reported experiments.
 
 Reference branch: `codex/minimize-due-deps`  
-Reference commit: `bd5da3d`  
+Reference commit: `add5ea7`  
 Release tag: pending final license and data-release decisions.
 
 ## Setup
