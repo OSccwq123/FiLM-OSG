@@ -162,6 +162,11 @@ def main():
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--data-dir", type=str, default=os.path.join("data"))
     parser.add_argument("--tag", type=str, default="")
+    parser.add_argument(
+        "--log-lag",
+        action="store_true",
+        help="Pass --log-lag to AD training jobs: log10(dt) before affine normalization.",
+    )
     parser.add_argument("--no-overwrite", action="store_true")
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument(
@@ -220,6 +225,7 @@ def main():
         print("Epochs:", args.epochs, flush=True)
         print("Batch size:", args.batch_size, flush=True)
         print("Data dir:", args.data_dir, flush=True)
+        print("Lag preprocessing:", "log10_then_affine" if args.log_lag else "affine_only", flush=True)
         print("Tag:", args.tag if args.tag else "(none)", flush=True)
         print("No GPU validation or jobs will be launched.", flush=True)
         for seed in seeds:
@@ -234,6 +240,8 @@ def main():
                     "--data-dir", args.data_dir,
                     "--dry-run",
                 ]
+                if args.log_lag:
+                    cmd.append("--log-lag")
                 if args.tag:
                     cmd.extend(["--tag", args.tag])
                 if args.no_overwrite:
@@ -270,6 +278,7 @@ def main():
     print("Epochs:", args.epochs, flush=True)
     print("Batch size:", args.batch_size, flush=True)
     print("Data dir:", args.data_dir, flush=True)
+    print("Lag preprocessing:", "log10_then_affine" if args.log_lag else "affine_only", flush=True)
     print("Tag:", args.tag if args.tag else "(none)", flush=True)
     print("Total jobs:", len(jobs), flush=True)
     print("=" * 80, flush=True)
@@ -312,6 +321,9 @@ def main():
                 "--batch-size", str(args.batch_size),
                 "--data-dir", args.data_dir,
             ]
+
+            if args.log_lag:
+                cmd.append("--log-lag")
 
             if args.tag:
                 cmd.extend(["--tag", args.tag])

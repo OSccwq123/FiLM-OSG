@@ -48,11 +48,12 @@ def make_config(
     epochs: int = 500,
     batch_size: int = 100,
     device: str | None = None,
+    log_lag: bool = False,
 ):
     return {
         "problem_type": "2d_regular",
         "problem_dim": 1,
-        "multiscale": False,
+        "multiscale": log_lag,
         "dtype": "float32",
 
         "seed": seed,
@@ -120,6 +121,7 @@ def train_one(
     save_dir: str = ".",
     device: str | None = None,
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
+    log_lag: bool = False,
     dry_run: bool = False,
 ):
     suffix = f"_{tag}" if tag else ""
@@ -132,6 +134,7 @@ def train_one(
         epochs=epochs,
         batch_size=batch_size,
         device=device,
+        log_lag=log_lag,
     )
 
     if dry_run:
@@ -141,6 +144,7 @@ def train_one(
         print("train_path =", train_path, flush=True)
         print("test_path =", test_path, flush=True)
         print("save_path =", save_path, flush=True)
+        print("lag_preprocessing =", "log10_then_affine" if log_lag else "affine_only", flush=True)
         print("config =", config, flush=True)
         print("No data loading, directory writes, or training were run.", flush=True)
         return
@@ -174,6 +178,7 @@ def train_one(
         "optimizer": config["optimizer"],
         "scheduler": config["scheduler"],
         "loss": config["loss"],
+        "multiscale": config["multiscale"],
         "sg_pairing": config["sg_pairing"],
         "sg_weight": config["sg_weight"],
         "modes1": config["modes1"],
@@ -214,6 +219,11 @@ def main():
     parser.add_argument("--save-dir", type=str, default=".")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
+    parser.add_argument(
+        "--log-lag",
+        action="store_true",
+        help="Use log10(dt) before affine lag normalization for this AD run.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-overwrite", action="store_true")
     args = parser.parse_args()
@@ -228,6 +238,7 @@ def main():
         save_dir=args.save_dir,
         device=args.device,
         data_dir=args.data_dir,
+        log_lag=args.log_lag,
         dry_run=args.dry_run,
     )
 
