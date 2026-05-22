@@ -44,18 +44,6 @@ Then install the repository's minimal Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
-Confirm that the external `due` package is not installed:
-
-```bash
-python -c "import importlib.util; print('due installed:', importlib.util.find_spec('due') is not None)"
-```
-
-Expected output:
-
-```text
-due installed: False
-```
-
 ## Optional Dependencies
 
 The current smoke-tested `.mat` files are readable through `scipy.io.loadmat`.

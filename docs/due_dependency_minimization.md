@@ -23,8 +23,10 @@ Active scripts no longer import from external `due`. Evaluation keeps a local
 pickle alias shim so model files saved under old `due.*` module paths can be
 loaded through local `film_osg` modules.
 
-Archived scripts in `scripts/archive/` still contain direct `due` imports by
-design; they are retained for provenance and are not active entrypoints.
+Historical scripts that imported `due.*` directly are not part of the active
+public entrypoints. Provenance is kept through `NOTICE`,
+`docs/third_party_attribution.md`, and source-file attribution headers rather
+than through runnable legacy scripts.
 
 ## Migration Behavior
 

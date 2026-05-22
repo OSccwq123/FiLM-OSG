@@ -1,12 +1,16 @@
 # FiLM-OSG
 
-Reproducibility code for the FiLM-OSG manuscript. The repository includes
-training entrypoints, evaluation scripts, overhead profiling, lightweight
-multi-GPU launchers, and minimal data-generation scripts.
+![reproducibility](https://img.shields.io/badge/reproducibility-draft-blue)
+![python](https://img.shields.io/badge/python-3.11-blue)
+![pytorch](https://img.shields.io/badge/pytorch-2.0.1-orange)
 
-The active code path uses the local `film_osg` package and does not require the
-external `due` package. Compatibility aliases are kept for older DUE-style model
-files.
+Reproducibility code for the FiLM-OSG manuscript. This repository contains
+training, evaluation, profiling, and lightweight launcher entrypoints for the
+reported experiments.
+
+Reference branch: `codex/minimize-due-deps`  
+Reference commit: `bd5da3d`  
+Release tag: pending final license and data-release decisions.
 
 ## Setup
 
@@ -17,13 +21,12 @@ python -m pip install torch==2.0.1+cu117 --index-url https://download.pytorch.or
 python -m pip install -r requirements.txt
 ```
 
-If your CUDA stack needs a different PyTorch build, install the matching PyTorch
-wheel first, then install `requirements.txt`. See `docs/environment.md` for
-tested versions and optional dependencies.
+Install a different PyTorch wheel if required by your CUDA driver. See
+`docs/environment.md` for the smoke-tested package versions.
 
 ## Data
 
-Place benchmark `.mat` files under `data/`:
+Place benchmark `.mat` files under `data/` or pass `--data-dir`.
 
 ```text
 data/BurgersOSG_train.mat
@@ -34,8 +37,7 @@ data/VorticityOSG_train.mat
 data/VorticityOSG_test.mat
 ```
 
-Scripts accept `--data-dir /path/to/data` for alternate locations. Burgers and
-advection-diffusion data can be regenerated with:
+Burgers and advection--diffusion data can be regenerated locally:
 
 ```matlab
 cd data
@@ -43,73 +45,58 @@ Burgers
 convection_diffusion
 ```
 
-The `.mat` files are not tracked by normal git. See `data/README.md` for file
-formats, checksums, generation notes, and redistribution cautions.
+Navier--Stokes uses the public DUE benchmark data format. The repository
+expects the two `VorticityOSG_*.mat` files above but does not redistribute
+large `.mat` files through normal git. See `data/README.md` for shapes,
+checksums, and data-release notes.
 
 ## Quick Checks
 
-These checks should not require CUDA, large datasets, model weights, or the
-external `due` package:
+These commands should not require CUDA, data files, or model weights:
 
 ```bash
 python train/run_burgers_fno.py --help
 python train/run_convdiff_fno.py --help
 python train/train_ns_one.py --help
-python train/train_ns_extra_backbones.py --help
-python eval/eval_burgers_fno.py --help
-python eval/eval_convdiff_fno.py --help
 python eval/eval_ns_fno.py --help
-python eval/eval_ns_extra_backbones.py --help
-python eval/eval_ns_ablation.py --help
 python profiling/profile_ns_overhead.py --help
 ```
 
-Useful dry-run examples:
+Dry-run/check-only examples:
 
 ```bash
 python train/run_convdiff_fno.py --model fno_film --seed 0 --dry-run
 python scripts/launch_convdiff_fno.py --list-gpus
 python eval/eval_burgers_fno.py --check-only --skip-missing
-python profiling/profile_ns_overhead.py --check-only --models fno,fno_film
 ```
 
-## Reproducing Experiments
+## Main Runs
 
-The manuscript is the source of truth for experimental details. The entrypoints
-below use manuscript-aligned defaults for model settings, losses, and training
-lengths; pass seeds and GPU ids explicitly.
-
-Main FNO training:
+Use the manuscript for the authoritative protocol. Pass seeds and GPU ids
+explicitly.
 
 ```bash
 python scripts/launch_burgers_fno.py --seeds 0,1,2 --gpus 0,1 --models fno,fno_film
 python scripts/launch_convdiff_fno.py --seeds 0,1,2 --gpus 0,1 --models fno,fno_film
-python train/train_ns_one.py --model fno --seed 0
-python train/train_ns_one.py --model fno_film --seed 0
-```
-
-NS extra-backbone diagnostics:
-
-```bash
-python scripts/launch_ns_extra_backbones.py --seeds 0,1,2 --gpus 0,1 --models uno,uno_film,transolver,transolver_film
-```
-
-Evaluation and profiling:
-
-```bash
 python eval/eval_burgers_fno.py --seeds 0,1,2 --models fno,fno_film
 python eval/eval_convdiff_fno.py --seeds 0,1,2 --models fno,fno_film
 python eval/eval_ns_fno.py --seeds 0,1,2,3,4 --models fno,fno_film
+```
+
+Navier--Stokes auxiliary diagnostics:
+
+```bash
+python scripts/launch_ns_extra_backbones.py --seeds 0,1,2 --gpus 0,1 --models uno,uno_film,transolver,transolver_film
 python eval/eval_ns_extra_backbones.py --seeds 0,1,2 --models uno,uno_film,transolver,transolver_film
 python eval/eval_ns_ablation.py --seeds 0
 python profiling/profile_ns_overhead.py --models fno,fno_film,uno,uno_film,transolver,transolver_film
 ```
 
 Launchers print the PyTorch-visible GPU mapping with
-`CUDA_DEVICE_ORDER=PCI_BUS_ID`. They accept any CUDA GPU by default; use
-`--require-gpu-name` only if you intentionally want to filter by model name.
+`CUDA_DEVICE_ORDER=PCI_BUS_ID`. Use `--require-gpu-name` only when you
+intentionally want to filter by model name.
 
-## Repository Layout
+## Layout
 
 ```text
 film_osg/       local package used by active scripts
@@ -118,19 +105,19 @@ eval/           evaluation scripts writing CSV/JSON/MAT outputs
 profiling/      overhead profiling entrypoints
 scripts/        launchers and orchestration helpers
 data/           data-generation scripts and ignored .mat files
-docs/           environment, dependency, and attribution notes
+docs/           environment and attribution notes
 ```
 
-Historical or one-off scripts are kept under `scripts/archive/` for provenance.
+Plotting scripts and generated figures are intentionally ignored by git in this
+draft repository.
 
 ## License and Attribution
 
-The final top-level repository license is pending confirmation by the authors
-and advisor. Until a `LICENSE` file is added, treat this repository as shared
-for review and reproducibility preparation rather than as generally licensed
-software.
+The final top-level license is pending author/advisor confirmation. Until a
+`LICENSE` file is added, treat this repository as shared for review and
+reproducibility preparation rather than as generally licensed software.
 
-Portions of `film_osg` are adapted from
-[AI4Equations/DUE](https://github.com/AI4Equations/due), which is marked
-upstream as LGPL-2.1 licensed. See `NOTICE`, `docs/third_party_attribution.md`,
-and `THIRD_PARTY_LICENSES/` for provenance and release-review placeholders.
+Some local implementation files are adapted from
+[AI4Equations/DUE](https://github.com/AI4Equations/due). See `NOTICE`,
+`docs/third_party_attribution.md`, and `THIRD_PARTY_LICENSES/` for attribution
+and release-review placeholders.

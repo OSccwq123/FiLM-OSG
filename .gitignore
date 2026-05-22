@@ -5,6 +5,10 @@ runs_*/
 eval_outputs_*/
 logs/
 overhead_outputs_*/
+figures/
+scripts/plot_*.m
+_edge_tmp/
+_tmp_pypdf/
 
 # Local backup / cache
 backups/
