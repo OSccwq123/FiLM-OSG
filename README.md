@@ -88,7 +88,7 @@ Navier--Stokes auxiliary diagnostics:
 ```bash
 python scripts/launch_ns_extra_backbones.py --seeds 0,1,2 --gpus 0,1 --models uno,uno_film,transolver,transolver_film
 python eval/eval_ns_extra_backbones.py --seeds 0,1,2 --models uno,uno_film,transolver,transolver_film
-python eval/eval_ns_ablation.py --seeds 0
+python eval/eval_ns_ablation.py --seeds 0,1,2
 python profiling/profile_ns_overhead.py --models fno,fno_film,uno,uno_film,transolver,transolver_film
 ```
 
@@ -110,6 +110,21 @@ docs/           environment and attribution notes
 
 Plotting scripts and generated figures are intentionally ignored by git in this
 draft repository.
+
+## Optional Diagnostics
+
+The advection--diffusion lag-extrapolation diagnostic is not part of the main
+benchmark table. It generates fixed-lag test sets outside the training lag
+interval `[0.005, 0.5]` and evaluates already trained AD models:
+
+```matlab
+cd data
+convection_diffusion_fixed_lag_extrapolation
+```
+
+```bash
+python eval/eval_convdiff_lag_extrapolation.py --models fno,fno_film --seeds 0,1,2 --tag ad_affine_seed012 --data-dir data
+```
 
 ## License and Attribution
 

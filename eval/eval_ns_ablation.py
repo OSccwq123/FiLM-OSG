@@ -17,7 +17,7 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "VorticityOSG_train.mat"
 TEST_FILE = "VorticityOSG_test.mat"
 
-DEFAULT_SEEDS = [0]
+DEFAULT_SEEDS = [0, 1, 2]
 DEFAULT_VARIANTS = ["direct_nosg", "film_nosg", "direct_sg", "film_sg"]
 
 
@@ -389,7 +389,7 @@ def main():
     parser.add_argument(
         "--save-dir",
         type=str,
-        default="./eval_outputs_ns_ablation_seed0",
+        default="./eval_outputs_ns_ablation_seed012",
     )
     parser.add_argument("--model-root", type=str, default=".")
     parser.add_argument("--tag", type=str, default="")
