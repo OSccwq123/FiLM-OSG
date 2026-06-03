@@ -180,6 +180,7 @@ The summary script creates compact metric/drift panels; the flow script creates
 field/profile figures intended for manuscript visual inspection:
 
 ```bash
+python scripts/plot_method_diagram.py --out-dir paper_figures
 python scripts/plot_paper_figures.py --out-dir paper_figures
 python scripts/plot_paper_flow_figures.py --out-dir paper_figures --pred-dir paper_figures/predictions
 ```
