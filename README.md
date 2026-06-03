@@ -175,6 +175,12 @@ then collect the completed seedwise CSV files with:
 python scripts/summarize_vt_baselines.py --root eval_outputs_vt_baselines_5seed
 ```
 
+Manuscript-facing PDF figures can be generated from completed evaluation summaries:
+
+```bash
+python scripts/plot_paper_figures.py --out-dir paper_figures
+```
+
 Launchers print the PyTorch-visible GPU mapping with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`. Use `--require-gpu-name` only when you
 intentionally want to filter by model name.

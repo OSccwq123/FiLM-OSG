@@ -3,6 +3,7 @@
 data/*.png
 runs_*/
 eval_outputs_*/
+paper_figures/
 logs/
 overhead_outputs_*/
 figures/
