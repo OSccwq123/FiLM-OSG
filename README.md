@@ -158,10 +158,18 @@ python train/train_ns_one.py --model gl_fno_film --seed 0 --tag ns_seed0_gl_film
 Evaluation examples:
 
 ```bash
-python eval/eval_burgers_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film --data-dir data/burgers_sharp
+python eval/eval_burgers_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film,vt_fno,vt_fno_film --data-dir data/burgers_sharp
 python eval/eval_convdiff_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film,vt_fno,vt_fno_film
 python eval/eval_ns_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film
 python eval/eval_ns_partition_spread.py --models fno,fno_film,gl_fno_film --seeds 0 --partitions 1,2,4,8
+```
+
+When VT baseline runs use seed-indexed tags such as
+`vt_external_seed0_burgers_sharp`, evaluate each seed with the matching tag and
+then collect the completed seedwise CSV files with:
+
+```bash
+python scripts/summarize_vt_baselines.py --root eval_outputs_vt_baselines_5seed
 ```
 
 Launchers print the PyTorch-visible GPU mapping with
