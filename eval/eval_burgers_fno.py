@@ -17,8 +17,8 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "BurgersOSG_train.mat"
 TEST_FILE = "BurgersOSG_test.mat"
 
-DEFAULT_MODELS = ["fno", "fno_film"]
-DEFAULT_PAIRS = [("fno", "fno_film")]
+DEFAULT_MODELS = ["fno", "fno_film", "gl_fno", "gl_fno_film"]
+DEFAULT_PAIRS = [("fno", "fno_film"), ("gl_fno", "gl_fno_film"), ("fno_film", "gl_fno_film")]
 DEFAULT_SEEDS = [0, 1, 2]
 DEFAULT_TAG = ""
 DEFAULT_SAVE_DIR = "./eval_outputs_burgers_fno"
@@ -53,6 +53,35 @@ def model_path_for(model_name, seed, tag, root="."):
     return os.path.join(root, f"runs_burgers_{model_name}_seed{seed}{suffix}", "model")
 
 
+def _high_frequency_error_1d(pred_state, true_state, band_frac=1.0 / 3.0, eps=1e-12):
+    err = np.asarray(pred_state - true_state)
+    ref = np.asarray(true_state)
+    err_hat = np.fft.rfft(err, axis=0)
+    ref_hat = np.fft.rfft(ref, axis=0)
+    nfreq = err_hat.shape[0]
+    start = max(1, int((1.0 - band_frac) * nfreq))
+    return np.linalg.norm(err_hat[start:].reshape(-1)) / (np.linalg.norm(ref_hat[start:].reshape(-1)) + eps)
+
+
+def _total_variation_1d(state):
+    return np.abs(np.roll(state, -1, axis=0) - state).sum(axis=0).mean()
+
+
+def _shock_location_error_1d(pred_state, true_state):
+    pred_grad = np.abs(np.roll(pred_state, -1, axis=0) - np.roll(pred_state, 1, axis=0)).reshape(pred_state.shape[0], -1).mean(axis=1)
+    true_grad = np.abs(np.roll(true_state, -1, axis=0) - np.roll(true_state, 1, axis=0)).reshape(true_state.shape[0], -1).mean(axis=1)
+    n = pred_state.shape[0]
+    raw = abs(int(np.argmax(pred_grad)) - int(np.argmax(true_grad)))
+    return float(min(raw, n - raw) / n)
+
+
+def _overshoot_error(pred_state, true_state):
+    return float(
+        max(0.0, float(pred_state.max() - true_state.max()))
+        + max(0.0, float(true_state.min() - pred_state.min()))
+    )
+
+
 def compute_metrics(pred, truth, eps=1e-12):
     pred_roll = pred[..., 1:]
     true_roll = truth[..., 1:]
@@ -62,14 +91,20 @@ def compute_metrics(pred, truth, eps=1e-12):
     rel_l1_list = []
     rel_l2_list = []
     final_rel_l2_list = []
+    hf_rel_list = []
+    tv_err_list = []
+    shock_loc_list = []
+    overshoot_list = []
 
     N = pred_roll.shape[0]
     T = pred_roll.shape[-1]
 
     for n in range(N):
         for t in range(T):
-            p = pred_roll[n, ..., t].reshape(-1)
-            y = true_roll[n, ..., t].reshape(-1)
+            p_state = pred_roll[n, ..., t]
+            y_state = true_roll[n, ..., t]
+            p = p_state.reshape(-1)
+            y = y_state.reshape(-1)
 
             rel_l1_list.append(
                 np.linalg.norm(p - y, 1) / (np.linalg.norm(y, 1) + eps)
@@ -77,6 +112,10 @@ def compute_metrics(pred, truth, eps=1e-12):
             rel_l2_list.append(
                 np.linalg.norm(p - y, 2) / (np.linalg.norm(y, 2) + eps)
             )
+            hf_rel_list.append(_high_frequency_error_1d(p_state, y_state, eps=eps))
+            tv_err_list.append(abs(_total_variation_1d(p_state) - _total_variation_1d(y_state)))
+            shock_loc_list.append(_shock_location_error_1d(p_state, y_state))
+            overshoot_list.append(_overshoot_error(p_state, y_state))
 
         pT = pred_roll[n, ..., -1].reshape(-1)
         yT = true_roll[n, ..., -1].reshape(-1)
@@ -89,6 +128,10 @@ def compute_metrics(pred, truth, eps=1e-12):
         "Rel-L1": float(np.mean(rel_l1_list)),
         "Mean Rel-L2": float(np.mean(rel_l2_list)),
         "Final Rel-L2": float(np.mean(final_rel_l2_list)),
+        "HF Rel-L2": float(np.mean(hf_rel_list)),
+        "TV Error": float(np.mean(tv_err_list)),
+        "Shock Loc Error": float(np.mean(shock_loc_list)),
+        "Overshoot": float(np.mean(overshoot_list)),
     }
 
 
@@ -159,7 +202,8 @@ def evaluate_one_model(
         f"MAE={metrics['MAE']:.6e}, "
         f"Rel-L1={metrics['Rel-L1']:.6e}, "
         f"Mean Rel-L2={metrics['Mean Rel-L2']:.6e}, "
-        f"Final Rel-L2={metrics['Final Rel-L2']:.6e}",
+        f"Final Rel-L2={metrics['Final Rel-L2']:.6e}, "
+        f"HF Rel-L2={metrics['HF Rel-L2']:.6e}",
         flush=True,
     )
 
@@ -333,7 +377,7 @@ def main():
     seeds = parse_int_list(args.seeds)
     train_path, test_path = resolve_data_paths(args.data_dir)
 
-    metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2"]
+    metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2", "HF Rel-L2", "TV Error", "Shock Loc Error", "Overshoot"]
 
     print("=" * 80, flush=True)
     print("Burgers FNO evaluation", flush=True)

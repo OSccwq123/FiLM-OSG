@@ -4,13 +4,18 @@
 ![python](https://img.shields.io/badge/python-3.11-blue)
 ![pytorch](https://img.shields.io/badge/pytorch-2.0.1-orange)
 
-Reproducibility code for the FiLM-OSG manuscript. This repository contains
-training, evaluation, profiling, and lightweight launcher entrypoints for the
-reported experiments.
+Reproducibility code for the FiLM-OSG manuscript. This repository contains model
+implementations, data-generation utilities, training entrypoints, evaluation
+diagnostics, profiling scripts, and lightweight launcher helpers used to prepare
+the reported experiments.
 
-Reference branch: `codex/minimize-due-deps`  
-Reference commit: `add5ea7`  
+Reference branch: `codex/minimize-due-deps`
+Reference commit: `add5ea7`
 Release tag: pending final license and data-release decisions.
+
+The active code path uses the local `film_osg` package and does not require the
+external `due` package. Compatibility aliases are kept for older DUE-style model
+files.
 
 ## Setup
 
@@ -45,10 +50,51 @@ Burgers
 convection_diffusion
 ```
 
-Navier--Stokes uses the public DUE benchmark data format. The repository
-expects the two `VorticityOSG_*.mat` files above but does not redistribute
-large `.mat` files through normal git. See `data/README.md` for shapes,
-checksums, and data-release notes.
+Navier--Stokes uses the public DUE benchmark data format. The repository expects
+the two `VorticityOSG_*.mat` files above but does not redistribute large `.mat`
+files through normal git. See `data/README.md` for shapes, checksums, and
+data-release notes.
+
+The sharp-front inviscid Burgers extension used for global-local ablations is
+generated separately:
+
+```bash
+python scripts/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+```
+
+This generator uses a fine-grid finite-volume/Rusanov solver and conservative
+averaging to the learning grid. The generated files are written as
+`BurgersSharpOSG_train.mat` and `BurgersSharpOSG_test.mat`; either pass
+`--data-dir data/burgers_sharp` to the Burgers scripts or provide local symlinks
+named `BurgersOSG_train.mat` and `BurgersOSG_test.mat`.
+
+## Implemented Models and Options
+
+The main FNO entrypoints expose the following model families:
+
+```text
+fno             OSG-FNO outer-increment baseline
+fno_film        FiLM-OSG-FNO with lag-conditioned channel modulation
+gl_fno          global-local OSG-FNO
+gl_fno_film     global-local FiLM-OSG-FNO
+vt_fno          direct variable-time FNO baseline without OSG structure
+vt_fno_film     direct variable-time FiLM-FNO baseline without OSG structure
+```
+
+Important training options:
+
+```text
+--conserve-mean        project the learned increment to mean zero
+--hf-weight            high-frequency data loss weight
+--hf-sg-weight         high-frequency semigroup-consistency loss weight
+--hf-warmup-frac       fraction of epochs used to warm up high-frequency losses
+--gl-film-mode         global_only or branchwise FiLM modulation for GL models
+--log-lag              use log-lag conditioning for advection--diffusion
+```
+
+The VT baselines intentionally disable semigroup regularization, projection, and
+high-frequency losses inside the training scripts. They are included as external
+variable-time baselines, not as OSG variants.
 
 ## Quick Checks
 
@@ -58,58 +104,69 @@ These commands should not require CUDA, data files, or model weights:
 python train/run_burgers_fno.py --help
 python train/run_convdiff_fno.py --help
 python train/train_ns_one.py --help
+python eval/eval_burgers_fno.py --help
+python eval/eval_convdiff_fno.py --help
 python eval/eval_ns_fno.py --help
+python eval/eval_ns_partition_spread.py --help
 python profiling/profile_ns_overhead.py --help
 ```
 
 Dry-run/check-only examples:
 
 ```bash
-python train/run_convdiff_fno.py --model fno_film --seed 0 --dry-run
-python scripts/launch_convdiff_fno.py --list-gpus
+python train/run_burgers_fno.py --model gl_fno_film --seed 0 --dry-run --conserve-mean --gl-film-mode branchwise
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --dry-run
+python train/train_ns_one.py --model gl_fno_film --seed 0 --dry-run --conserve-mean
 python eval/eval_burgers_fno.py --check-only --skip-missing
 ```
 
-## Main Runs
+## Representative Experiment Commands
 
-Use the manuscript for the authoritative protocol. Pass seeds and GPU ids
-explicitly.
+Full multi-seed reproduction of every manuscript table is computationally
+expensive and should be scheduled on a cluster. The commands below are
+representative single-job entrypoints showing the manuscript-facing settings;
+choose seeds, GPUs, and job-array scheduling explicitly for your system.
+
+Burgers sharp-front:
 
 ```bash
-python scripts/launch_burgers_fno.py --seeds 0,1,2 --gpus 0,1 --models fno,fno_film
-python scripts/launch_convdiff_fno.py --seeds 0,1,2 --gpus 0,1 --models fno,fno_film
-python eval/eval_burgers_fno.py --seeds 0,1,2 --models fno,fno_film
-python eval/eval_convdiff_fno.py --seeds 0,1,2 --models fno,fno_film
-python eval/eval_ns_fno.py --seeds 0,1,2,3,4 --models fno,fno_film
+python train/run_burgers_fno.py --model fno --seed 0 --tag burgers_sharp_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000
+python train/run_burgers_fno.py --model fno_film --seed 0 --tag burgers_sharp_film_proj_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000 --conserve-mean
+python train/run_burgers_fno.py --model gl_fno_film --seed 0 --tag burgers_sharp_branchwise_proj_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000 --conserve-mean --gl-film-mode branchwise
+python train/run_burgers_fno.py --model vt_fno --seed 0 --tag vt_external_seed0_burgers_sharp --data-dir data/burgers_sharp --epochs 1000
+python train/run_burgers_fno.py --model vt_fno_film --seed 0 --tag vt_film_external_seed0_burgers_sharp --data-dir data/burgers_sharp --epochs 1000
 ```
 
-Navier--Stokes auxiliary diagnostics:
+Advection--diffusion:
 
 ```bash
-python scripts/launch_ns_extra_backbones.py --seeds 0,1,2 --gpus 0,1 --models uno,uno_film,transolver,transolver_film
-python eval/eval_ns_extra_backbones.py --seeds 0,1,2 --models uno,uno_film,transolver,transolver_film
-python eval/eval_ns_ablation.py --seeds 0,1,2
-python profiling/profile_ns_overhead.py --models fno,fno_film,uno,uno_film,transolver,transolver_film
+python train/run_convdiff_fno.py --model fno --seed 0 --tag ad_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_seed0_film_loglag_proj --data-dir data --epochs 500 --log-lag --conserve-mean
+python train/run_convdiff_fno.py --model gl_fno_film --seed 0 --tag ad_seed0_branchwise_loglag_proj --data-dir data --epochs 500 --log-lag --conserve-mean --gl-film-mode branchwise
+python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag vt_external_seed0_ad --data-dir data --epochs 500
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag vt_film_external_seed0_ad --data-dir data --epochs 500
+```
+
+Navier--Stokes:
+
+```bash
+python train/train_ns_one.py --model fno --seed 0 --tag ns_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
+python train/train_ns_one.py --model fno_film --seed 0 --tag ns_seed0_film_proj --data-dir data --epochs 500 --conserve-mean
+python train/train_ns_one.py --model gl_fno_film --seed 0 --tag ns_seed0_gl_film_ablation --data-dir data --epochs 500 --conserve-mean
+```
+
+Evaluation examples:
+
+```bash
+python eval/eval_burgers_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film --data-dir data/burgers_sharp
+python eval/eval_convdiff_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film,vt_fno,vt_fno_film
+python eval/eval_ns_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film
+python eval/eval_ns_partition_spread.py --models fno,fno_film,gl_fno_film --seeds 0 --partitions 1,2,4,8
 ```
 
 Launchers print the PyTorch-visible GPU mapping with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`. Use `--require-gpu-name` only when you
 intentionally want to filter by model name.
-
-## Layout
-
-```text
-film_osg/       local package used by active scripts
-train/          single-job training entrypoints
-eval/           evaluation scripts writing CSV/JSON/MAT outputs
-profiling/      overhead profiling entrypoints
-scripts/        launchers and orchestration helpers
-data/           data-generation scripts and ignored .mat files
-docs/           environment and attribution notes
-```
-
-Plotting scripts and generated figures are intentionally ignored by git in this
-draft repository.
 
 ## Optional Diagnostics
 
@@ -125,6 +182,22 @@ convection_diffusion_fixed_lag_extrapolation
 ```bash
 python eval/eval_convdiff_lag_extrapolation.py --models fno,fno_film --seeds 0,1,2 --tag ad_affine_seed012 --data-dir data
 ```
+
+## Layout
+
+```text
+film_osg/       local package used by active scripts
+train/          single-job training entrypoints
+eval/           evaluation scripts and shared diagnostics
+profiling/      overhead profiling entrypoints
+scripts/        data utilities, launchers, and small inspection helpers
+data/           data-generation scripts and ignored .mat files
+docs/           environment and attribution notes
+```
+
+Historical or one-off scripts are kept under `scripts/archive/` for provenance.
+Generated datasets, model checkpoints, logs, evaluation outputs, plotting
+artifacts, and one-off queue files are intentionally ignored by git.
 
 ## License and Attribution
 

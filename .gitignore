@@ -21,3 +21,18 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# Experiment logs and generated summaries
+logs*/
+nohup.out
+eval_model_roots/
+notes/
+
+# Generated datasets under data subdirectories
+/data/*/
+!/data/.gitkeep
+
+# Transient single-file outputs
+logs*.txt
+eval_outputs*.json
+/data/*.py

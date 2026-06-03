@@ -16,7 +16,7 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "train_data.mat"
 TEST_FILE = "test_data.mat"
 
-MODEL_CHOICES = ["fno", "fno_film"]
+MODEL_CHOICES = ["fno", "fno_film", "gl_fno", "gl_fno_film", "vt_fno", "vt_fno_film"]
 
 
 def resolve_data_paths(data_dir: str | os.PathLike[str]):
@@ -48,6 +48,11 @@ def make_config(
     epochs: int = 500,
     batch_size: int = 100,
     device: str | None = None,
+    hf_weight: float = 0.0,
+    hf_sg_weight: float = 0.0,
+    hf_warmup_frac: float = 0.1,
+    conserve_mean: bool = False,
+    gl_film_mode: str = "global_only",
     log_lag: bool = False,
 ):
     return {
@@ -79,14 +84,51 @@ def make_config(
         "depth": 4,
         "width": 20,
 
+        "local_kernel_size": 3,
+        "local_pool_factor": 2,
+        "gl_layer_scale": 1e-3,
+        "hf_weight": hf_weight,
+        "hf_sg_weight": hf_sg_weight,
+        "hf_warmup_frac": hf_warmup_frac,
+        "hf_band_frac": 1.0 / 3.0,
+        "hf_power": 2.0,
+        "conserve_mean": conserve_mean,
+        "gl_film_mode": gl_film_mode,
+
         "save_path": save_path,
     }
 
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
-    from film_osg.networks.fno import osg_fno2d, osg_fno2d_with_film
+    from film_osg.networks.fno import (
+        gl_osg_fno2d,
+        gl_osg_fno2d_with_film,
+        osg_fno2d,
+        osg_fno2d_with_film,
+        vt_fno2d,
+        vt_fno2d_with_film,
+    )
 
     print("network_import_source = film_osg", flush=True)
+
+    if model_name == "vt_fno":
+        return vt_fno2d(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+    if model_name == "vt_fno_film":
+        return vt_fno2d_with_film(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
 
     if model_name == "fno":
         return osg_fno2d(
@@ -107,6 +149,10 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
             config=config,
             multiscale=config["multiscale"],
         )
+    if model_name == "gl_fno":
+        return gl_osg_fno2d(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
+    if model_name == "gl_fno_film":
+        return gl_osg_fno2d_with_film(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
 
     raise ValueError(f"Unknown model_name: {model_name}")
 
@@ -123,6 +169,11 @@ def train_one(
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
     log_lag: bool = False,
     dry_run: bool = False,
+    hf_weight: float = 0.0,
+    hf_sg_weight: float = 0.0,
+    hf_warmup_frac: float = 0.1,
+    conserve_mean: bool = False,
+    gl_film_mode: str = "global_only",
 ):
     suffix = f"_{tag}" if tag else ""
     save_path = os.path.join(save_dir, f"runs_convdiff_{model_name}_seed{seed}{suffix}")
@@ -134,8 +185,20 @@ def train_one(
         epochs=epochs,
         batch_size=batch_size,
         device=device,
+        hf_weight=hf_weight,
+        hf_sg_weight=hf_sg_weight,
+        hf_warmup_frac=hf_warmup_frac,
+        conserve_mean=conserve_mean,
+        gl_film_mode=gl_film_mode,
         log_lag=log_lag,
     )
+
+    if model_name in {"vt_fno", "vt_fno_film"}:
+        config["sg_pairing"] = 0
+        config["sg_weight"] = 0.0
+        config["hf_weight"] = 0.0
+        config["hf_sg_weight"] = 0.0
+        config["conserve_mean"] = False
 
     if dry_run:
         print("Advection-diffusion FNO training dry run", flush=True)
@@ -185,6 +248,11 @@ def train_one(
         "modes2": config["modes2"],
         "depth": config["depth"],
         "width": config["width"],
+        "hf_weight": config["hf_weight"],
+        "hf_sg_weight": config["hf_sg_weight"],
+        "hf_warmup_frac": config["hf_warmup_frac"],
+        "conserve_mean": config["conserve_mean"],
+        "gl_film_mode": config["gl_film_mode"],
     }, flush=True)
     print("CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES"), flush=True)
     print("torch.cuda.is_available =", torch.cuda.is_available(), flush=True)
@@ -226,6 +294,11 @@ def main():
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-overwrite", action="store_true")
+    parser.add_argument("--hf-weight", type=float, default=0.0)
+    parser.add_argument("--hf-sg-weight", type=float, default=0.0)
+    parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
+    parser.add_argument("--conserve-mean", action="store_true")
+    parser.add_argument("--gl-film-mode", type=str, default="global_only", choices=["branchwise", "global_only"])
     args = parser.parse_args()
 
     train_one(
@@ -240,6 +313,11 @@ def main():
         data_dir=args.data_dir,
         log_lag=args.log_lag,
         dry_run=args.dry_run,
+        hf_weight=args.hf_weight,
+        hf_sg_weight=args.hf_sg_weight,
+        hf_warmup_frac=args.hf_warmup_frac,
+        conserve_mean=args.conserve_mean,
+        gl_film_mode=args.gl_film_mode,
     )
 
 

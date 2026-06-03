@@ -12,6 +12,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+try:
+    from eval.diagnostics import combined_metrics
+except ModuleNotFoundError:
+    from diagnostics import combined_metrics
+
 
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "train_data.mat"
@@ -155,6 +160,7 @@ def evaluate_one_model(
 
     pred = np.asarray(pred, dtype=np.float32)
     metrics = compute_metrics(pred, truth)
+    metrics.update(combined_metrics(pred, truth, include_1d_local=False))
 
     step_tag = dt.shape[1]
 
@@ -337,7 +343,14 @@ def main():
     seeds = parse_int_list(args.seeds)
     train_path, test_path = resolve_data_paths(args.data_dir)
 
-    metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2"]
+    metric_keys = [
+        "MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2",
+        "Mean Drift Max", "Mean Drift Avg", "Mean Drift Final",
+        "Mean Ref Drift Avg", "Mean Ref Drift Final",
+        "Low Band Rel-L2", "Mid Band Rel-L2", "High Band Rel-L2", "HF Rel-L2",
+        "Final Low Band Rel-L2", "Final Mid Band Rel-L2", "Final High Band Rel-L2",
+        "Spectrum Error", "Final Spectrum Error",
+    ]
 
     print("=" * 80, flush=True)
     print("Convection--diffusion FNO evaluation", flush=True)

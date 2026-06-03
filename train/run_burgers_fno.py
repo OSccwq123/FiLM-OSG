@@ -16,7 +16,7 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "BurgersOSG_train.mat"
 TEST_FILE = "BurgersOSG_test.mat"
 
-MODEL_CHOICES = ["fno", "fno_film"]
+MODEL_CHOICES = ["fno", "fno_film", "gl_fno", "gl_fno_film", "vt_fno", "vt_fno_film"]
 
 
 def resolve_data_paths(data_dir: str | os.PathLike[str]):
@@ -48,6 +48,13 @@ def make_config(
     epochs: int = 1000,
     batch_size: int = 100,
     device: str | None = None,
+    hf_weight: float = 0.0,
+    hf_sg_weight: float = 0.0,
+    hf_warmup_frac: float = 0.1,
+    conserve_mean: bool = False,
+    gl_film_mode: str = "branchwise",
+    modes: int = 10,
+    width: int = 60,
 ):
     return {
         "problem_type": "1d_regular",
@@ -73,18 +80,55 @@ def make_config(
         "activation": "gelu",
 
         # FNO-1D backbone
-        "modes": 10,
+        "modes": int(modes),
         "depth": 3,
-        "width": 60,
+        "width": int(width),
+
+        "local_kernel_size": 5,
+        "local_pool_factor": 2,
+        "gl_layer_scale": 1e-3,
+        "hf_weight": hf_weight,
+        "hf_sg_weight": hf_sg_weight,
+        "hf_warmup_frac": hf_warmup_frac,
+        "hf_band_frac": 1.0 / 3.0,
+        "hf_power": 2.0,
+        "conserve_mean": conserve_mean,
+        "gl_film_mode": gl_film_mode,
 
         "save_path": save_path,
     }
 
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
-    from film_osg.networks.fno import osg_fno1d, osg_fno1d_with_film
+    from film_osg.networks.fno import (
+        gl_osg_fno1d,
+        gl_osg_fno1d_with_film,
+        osg_fno1d,
+        osg_fno1d_with_film,
+        vt_fno1d,
+        vt_fno1d_with_film,
+    )
 
     print("network_import_source = film_osg", flush=True)
+
+    if model_name == "vt_fno":
+        return vt_fno1d(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+    if model_name == "vt_fno_film":
+        return vt_fno1d_with_film(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
 
     if model_name == "fno":
         return osg_fno1d(
@@ -98,6 +142,26 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
 
     if model_name == "fno_film":
         return osg_fno1d_with_film(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+
+    if model_name == "gl_fno":
+        return gl_osg_fno1d(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+
+    if model_name == "gl_fno_film":
+        return gl_osg_fno1d_with_film(
             vmin=vmin,
             vmax=vmax,
             tmin=tmin,
@@ -120,6 +184,13 @@ def train_one(
     device: str | None = None,
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
     dry_run: bool = False,
+    hf_weight: float = 0.0,
+    hf_sg_weight: float = 0.0,
+    hf_warmup_frac: float = 0.1,
+    conserve_mean: bool = False,
+    gl_film_mode: str = "branchwise",
+    modes: int = 10,
+    width: int = 60,
 ):
     suffix = f"_{tag}" if tag else ""
     save_path = os.path.join(save_dir, f"runs_burgers_{model_name}_seed{seed}{suffix}")
@@ -131,7 +202,21 @@ def train_one(
         epochs=epochs,
         batch_size=batch_size,
         device=device,
+        hf_weight=hf_weight,
+        hf_sg_weight=hf_sg_weight,
+        hf_warmup_frac=hf_warmup_frac,
+        conserve_mean=conserve_mean,
+        gl_film_mode=gl_film_mode,
+        modes=modes,
+        width=width,
     )
+
+    if model_name in {"vt_fno", "vt_fno_film"}:
+        config["sg_pairing"] = 0
+        config["sg_weight"] = 0.0
+        config["hf_weight"] = 0.0
+        config["hf_sg_weight"] = 0.0
+        config["conserve_mean"] = False
 
     if dry_run:
         print("Burgers FNO training dry run", flush=True)
@@ -179,6 +264,11 @@ def train_one(
         "depth": config["depth"],
         "width": config["width"],
         "multiscale": config["multiscale"],
+        "hf_weight": config["hf_weight"],
+        "hf_sg_weight": config["hf_sg_weight"],
+        "hf_warmup_frac": config["hf_warmup_frac"],
+        "conserve_mean": config["conserve_mean"],
+        "gl_film_mode": config["gl_film_mode"],
     }, flush=True)
     print("CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES"), flush=True)
     print("torch.cuda.is_available =", torch.cuda.is_available(), flush=True)
@@ -215,6 +305,13 @@ def main():
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-overwrite", action="store_true")
+    parser.add_argument("--hf-weight", type=float, default=0.0)
+    parser.add_argument("--hf-sg-weight", type=float, default=0.0)
+    parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
+    parser.add_argument("--conserve-mean", action="store_true")
+    parser.add_argument("--gl-film-mode", type=str, default="branchwise", choices=["branchwise", "global_only"])
+    parser.add_argument("--modes", type=int, default=10)
+    parser.add_argument("--width", type=int, default=60)
     args = parser.parse_args()
 
     train_one(
@@ -228,6 +325,13 @@ def main():
         device=args.device,
         data_dir=args.data_dir,
         dry_run=args.dry_run,
+        hf_weight=args.hf_weight,
+        hf_sg_weight=args.hf_sg_weight,
+        hf_warmup_frac=args.hf_warmup_frac,
+        conserve_mean=args.conserve_mean,
+        gl_film_mode=args.gl_film_mode,
+        modes=args.modes,
+        width=args.width,
     )
 
 
