@@ -56,10 +56,11 @@ files through normal git. See `data/README.md` for shapes, checksums, and
 data-release notes.
 
 The sharp-front inviscid Burgers extension used for global-local ablations is
-generated separately:
+generated separately. Data-generation sources live under `scripts/data_generation/`,
+while `data/` is reserved for local `.mat` files and data notes:
 
 ```bash
-python scripts/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
 python scripts/check_burgers_sharp_data.py --data-dir data/burgers_sharp
 python scripts/plot_burgers_sharp_evolution.py --data-dir data/burgers_sharp
 ```
