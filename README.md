@@ -60,13 +60,15 @@ generated separately:
 
 ```bash
 python scripts/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+python scripts/check_burgers_sharp_data.py --data-dir data/burgers_sharp
+python scripts/plot_burgers_sharp_evolution.py --data-dir data/burgers_sharp
 ```
 
 This generator uses a fine-grid finite-volume/Rusanov solver and conservative
 averaging to the learning grid. The generated files are written as
 `BurgersSharpOSG_train.mat` and `BurgersSharpOSG_test.mat`; either pass
 `--data-dir data/burgers_sharp` to the Burgers scripts or provide local symlinks
-named `BurgersOSG_train.mat` and `BurgersOSG_test.mat`.
+named `BurgersOSG_train.mat` and `BurgersOSG_test.mat`. The check script writes `sanity_summary.json`, and the plot script writes a PDF with selected trajectory examples.
 
 ## Implemented Models and Options
 
