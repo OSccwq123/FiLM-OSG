@@ -175,10 +175,13 @@ then collect the completed seedwise CSV files with:
 python scripts/summarize_vt_baselines.py --root eval_outputs_vt_baselines_5seed
 ```
 
-Manuscript-facing PDF figures can be generated from completed evaluation summaries:
+Manuscript-facing PDF figures can be generated from completed evaluation summaries.
+The summary script creates compact metric/drift panels; the flow script creates
+field/profile figures intended for manuscript visual inspection:
 
 ```bash
 python scripts/plot_paper_figures.py --out-dir paper_figures
+python scripts/plot_paper_flow_figures.py --out-dir paper_figures --pred-dir paper_figures/predictions
 ```
 
 Launchers print the PyTorch-visible GPU mapping with
@@ -207,8 +210,8 @@ film_osg/       local package used by active scripts
 train/          single-job training entrypoints
 eval/           evaluation scripts and shared diagnostics
 profiling/      overhead profiling entrypoints
-scripts/        data utilities, launchers, and small inspection helpers
-data/           data-generation scripts and ignored .mat files
+scripts/        data utilities, data-generation scripts, launchers, and small inspection helpers
+data/           data notes and ignored local .mat files
 docs/           environment and attribution notes
 ```
 

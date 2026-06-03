@@ -48,4 +48,4 @@ release, confirm whether additional LGPL-2.1 notices, source-availability text,
 or license-file placement are needed for files adapted from AI4Equations/DUE.
 Also confirm the final citation and license treatment for the neuraloperator
 FNO reference, optional Mamba dependency, and architecture-reference projects.
-`THIRD_PARTY_LICENSES/` contains placeholders for that review.
+`THIRD_PARTY_LICENSES/` contains the currently tracked third-party license texts and remaining architecture-reference release-review notes.
