@@ -28,12 +28,14 @@ from eval.eval_burgers_fno import evaluate_one_model  # noqa: E402
 DEFAULT_MODELS = [
     ("OSG-FNO", "fno", "burgers_sharp_seed0_e1000"),
     ("FiLM-OSG-FNO + proj.", "fno_film", "burgers_sharp_film_proj_seed0_e1000"),
+    ("GL-FiLM-OSG-FNO + proj.", "gl_fno_film", "burgers_sharp_currentgl2_branchwise_proj_seed0_e1000"),
     ("VT-FNO", "vt_fno", "vt_external_seed0_burgers_sharp"),
 ]
 COLORS = {
     "Truth": "#111111",
     "OSG-FNO": "#4C78A8",
     "FiLM-OSG-FNO + proj.": "#F58518",
+    "GL-FiLM-OSG-FNO + proj.": "#54A24B",
     "VT-FNO": "#E45756",
 }
 
@@ -177,7 +179,7 @@ def burgers_flow_figure(args):
     ax_err.set_ylabel("|prediction - truth|")
     style(ax_err)
 
-    fig.suptitle("Sharp-front Burgers: variable-time baselines and FiLM-OSG front fidelity", fontsize=13)
+    fig.suptitle("Sharp-front Burgers: global-local FiLM extension near steep fronts", fontsize=13)
     fig.tight_layout(rect=[0, 0.02, 1, 0.94])
     args.out_dir.mkdir(parents=True, exist_ok=True)
     pdf = args.out_dir / "fig_burgers_sharp_flow_case.pdf"
