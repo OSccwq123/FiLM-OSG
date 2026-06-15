@@ -17,6 +17,13 @@ The active code path uses the local `film_osg` package and does not require the
 external `due` package. Compatibility aliases are kept for older DUE-style model
 files.
 
+The manuscript tables use seed-indexed runs, with five-seed summaries reported
+for the main Burgers, advection--diffusion, and selected sharp-front/VT controls
+unless a table is explicitly labeled as a seed-0 diagnostic. Full multi-seed
+reproduction is intended for cluster scheduling rather than a single bundled
+launcher. The profiling scripts report model parameters, training-step time,
+inference-step time, and peak CUDA memory for the hardware used by the user.
+
 ## Setup
 
 ```bash
