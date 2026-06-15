@@ -37,3 +37,22 @@ notes/
 logs*.txt
 eval_outputs*.json
 /data/*.py
+
+# Manuscript revision internals / local exploratory artifacts
+docs/revision_plan/
+README.md.bak_*
+*.bak_*
+*.bak
+paper_figures_flow*/
+overhead_outputs*/
+
+# Local queue/provenance helpers not intended for release
+scripts/check_training_queues.py
+scripts/check_burgers_sharp_current.py
+scripts/check_burgers_sharp_strength.py
+scripts/identify_burgers_sharp_dirs.py
+scripts/eval_burgers_current_combined*.py
+scripts/launch_ad_formal7_seed1_4_pool.sh
+scripts/launch_ns_seed1_4_selected_after_ad.sh
+scripts/smoke_old_checkpoints.py
+scripts/run_paper_experiments.sh

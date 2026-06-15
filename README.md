@@ -10,7 +10,7 @@ diagnostics, profiling scripts, and lightweight launcher helpers used to prepare
 the reported experiments.
 
 Reference branch: `codex/minimize-due-deps`
-Reference commit: `add5ea7`
+Reference commit: pending final release tag.
 Release tag: pending final license and data-release decisions.
 
 The active code path uses the local `film_osg` package and does not require the
@@ -113,6 +113,8 @@ python eval/eval_convdiff_fno.py --help
 python eval/eval_ns_fno.py --help
 python eval/eval_ns_partition_spread.py --help
 python profiling/profile_ns_overhead.py --help
+python profiling/profile_gl_overhead.py --help
+python scripts/smoke_new_features.py --help
 ```
 
 Dry-run/check-only examples:
@@ -217,9 +219,10 @@ data/           data notes and ignored local .mat files
 docs/           environment and attribution notes
 ```
 
-Historical or one-off scripts are kept under `scripts/archive/` for provenance.
 Generated datasets, model checkpoints, logs, evaluation outputs, plotting
-artifacts, and one-off queue files are intentionally ignored by git.
+artifacts, and one-off queue/provenance helpers are intentionally ignored by git.
+Representative commands are documented above instead of bundling a one-shot
+full-experiment launcher.
 
 ## License and Attribution
 
@@ -231,3 +234,14 @@ Some local implementation files are adapted from
 [AI4Equations/DUE](https://github.com/AI4Equations/due). See `NOTICE`,
 `docs/third_party_attribution.md`, and `THIRD_PARTY_LICENSES/` for attribution
 and release-review placeholders.
+
+## Release Checks
+
+Overhead profile commands:
+
+    python profiling/profile_ns_overhead.py --save-dir overhead_outputs_ns
+    python profiling/profile_gl_overhead.py --save-dir overhead_outputs_gl
+
+CPU-only smoke test for projection, high-frequency losses, and GL/FiLM paths:
+
+    python scripts/smoke_new_features.py --device cpu

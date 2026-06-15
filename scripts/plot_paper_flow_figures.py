@@ -39,6 +39,16 @@ COLORS = {
     "VT-FNO": "#E45756",
 }
 
+BURGERS_CAPTION = (
+    "Representative sharp-front Burgers rollout. The benchmark uses variable "
+    "query lags and nonsmooth initial profiles to stress local front resolution. "
+    "The figure compares the OSG baseline, FiLM-OSG with mean-zero projection, "
+    "the external variable-time FNO baseline, and the targeted GL-FiLM extension. "
+    "The zoom and absolute-error panels focus on the steep-front region, matching "
+    "the motivation from global-local conservation-law operators while keeping "
+    "GL-FiLM scoped as a sharp-front extension rather than the primary model."
+)
+
 
 def load_or_eval_predictions(args, label: str, model: str, tag: str, train_data, test_data):
     out_dir = args.pred_dir
@@ -143,7 +153,7 @@ def burgers_flow_figure(args):
         alpha = 0.95 if k in (0, truth.shape[-1] - 1) else 0.45
         label = "initial" if k == 0 else ("final truth" if k == truth.shape[-1] - 1 else None)
         ax_traj.plot(x, truth[case, :, 0, k], color=cmap[k], lw=lw, alpha=alpha, label=label)
-    ax_traj.set_title(f"Reference sharp-front evolution, sample {case}, T={times[-1]:.3f}")
+    ax_traj.set_title(f"Reference variable-lag sharp-front evolution (sample {case}, T={times[-1]:.3f})")
     ax_traj.set_xlabel("x")
     ax_traj.set_ylabel("u")
     ax_traj.legend(frameon=False, fontsize=8)
@@ -154,7 +164,7 @@ def burgers_flow_figure(args):
         y = p["prediction"][case, :, 0, -1]
         ax_full.plot(x, y, lw=1.7, color=COLORS.get(p["label"], "#777777"), label=p["label"])
     ax_full.axvline(center, color="#555555", lw=0.8, ls=":")
-    ax_full.set_title("Final-time prediction overlay")
+    ax_full.set_title("Final-time prediction")
     ax_full.set_xlabel("x")
     ax_full.set_ylabel("u")
     ax_full.legend(frameon=False, fontsize=7.5, ncol=1)
@@ -164,7 +174,7 @@ def burgers_flow_figure(args):
     for p in preds:
         y = p["prediction"][case, :, 0, -1]
         plot_periodic_segment(ax_zoom, x, y, left, right, lw=1.8, color=COLORS.get(p["label"], "#777777"), label=p["label"])
-    ax_zoom.set_title("Local zoom near steep front")
+    ax_zoom.set_title("Zoom near the steep front")
     ax_zoom.set_xlabel("x")
     ax_zoom.set_ylabel("u")
     style(ax_zoom)
@@ -174,12 +184,12 @@ def burgers_flow_figure(args):
         err = np.abs(y - final_truth)
         plot_periodic_segment(ax_err, x, err, left, right, lw=1.9, color=COLORS.get(p["label"], "#777777"), label=p["label"])
     ax_err.set_yscale("log")
-    ax_err.set_title("Absolute error in the same zoom window")
+    ax_err.set_title("Absolute error in the zoom window")
     ax_err.set_xlabel("x")
     ax_err.set_ylabel("|prediction - truth|")
     style(ax_err)
 
-    fig.suptitle("Sharp-front Burgers: global-local FiLM extension near steep fronts", fontsize=13)
+    fig.suptitle("Sharp-front Burgers: targeted global-local correction", fontsize=13)
     fig.tight_layout(rect=[0, 0.02, 1, 0.94])
     args.out_dir.mkdir(parents=True, exist_ok=True)
     pdf = args.out_dir / "fig_burgers_sharp_flow_case.pdf"
@@ -195,6 +205,12 @@ def burgers_flow_figure(args):
         "zoom_center": np.array([[center]], dtype=np.float64),
     }
     savemat(args.out_dir / "fig_burgers_sharp_flow_case_meta.mat", meta)
+    caption_path = args.out_dir / "figure_captions_gl_revision.txt"
+    existing = caption_path.read_text(encoding="utf-8") if caption_path.exists() else ""
+    marker = "Fig. sharp-front:"
+    lines = [line for line in existing.splitlines() if not line.startswith(marker)]
+    lines.append(f"{marker} {BURGERS_CAPTION}")
+    caption_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
     print("Generated", pdf)
     print("Generated", png)
     print("Selected sample", case, "front center", center)
