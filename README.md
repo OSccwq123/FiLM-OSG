@@ -10,7 +10,7 @@ diagnostics, profiling scripts, and lightweight launcher helpers used to prepare
 the reported experiments.
 
 Reference branch: `codex/minimize-due-deps`
-Reference commit: pending final release tag.
+Reference commit: use the commit pinned in the manuscript's Data/code availability statement.
 Release tag: pending final license and data-release decisions.
 
 The active code path uses the local `film_osg` package and does not require the
@@ -76,9 +76,19 @@ python scripts/plot_burgers_sharp_evolution.py --data-dir data/burgers_sharp
 
 This generator uses a fine-grid finite-volume/Rusanov solver and conservative
 averaging to the learning grid. The generated files are written as
-`BurgersSharpOSG_train.mat` and `BurgersSharpOSG_test.mat`; either pass
-`--data-dir data/burgers_sharp` to the Burgers scripts or provide local symlinks
-named `BurgersOSG_train.mat` and `BurgersOSG_test.mat`. The check script writes `sanity_summary.json`, and the plot script writes a PDF with selected trajectory examples.
+`BurgersSharpOSG_train.mat` and `BurgersSharpOSG_test.mat`. The Burgers entrypoints
+retain their historical compatibility names, so create local aliases before
+passing `--data-dir data/burgers_sharp`:
+
+```bash
+ln -s BurgersSharpOSG_train.mat data/burgers_sharp/BurgersOSG_train.mat
+ln -s BurgersSharpOSG_test.mat data/burgers_sharp/BurgersOSG_test.mat
+```
+
+Run these commands from the repository root. On systems without symbolic-link
+support, copy the two files to the compatibility names instead. The check script
+writes `sanity_summary.json`, and the plot script writes a PDF with selected
+trajectory examples.
 
 ## Implemented Models and Options
 
@@ -134,53 +144,57 @@ python train/train_ns_one.py --model gl_fno_film --seed 0 --dry-run --conserve-m
 python eval/eval_burgers_fno.py --check-only --skip-missing
 ```
 
-## Representative Experiment Commands
+## Representative Single-Seed Experiment Commands
 
-Full multi-seed reproduction of every manuscript table is computationally
-expensive and should be scheduled on a cluster. The commands below are
-representative single-job entrypoints showing the manuscript-facing settings;
-choose seeds, GPUs, and job-array scheduling explicitly for your system.
+Full multi-seed reproduction is computationally expensive and should be
+scheduled explicitly on a cluster. The commands below form matched seed-0
+training/evaluation examples. Repeat them with other seed values, and choose GPUs
+and job-array scheduling for your system; no one-shot full-experiment launcher is
+provided.
+
+Original Burgers:
+
+```bash
+python train/run_burgers_fno.py --model fno --seed 0 --tag original_burgers_core --data-dir data --epochs 1000
+python train/run_burgers_fno.py --model fno_film --seed 0 --tag original_burgers_core --data-dir data --epochs 1000
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag original_burgers_core --data-dir data --save-dir eval_outputs_burgers_original_seed0
+```
 
 Burgers sharp-front:
 
 ```bash
-python train/run_burgers_fno.py --model fno --seed 0 --tag burgers_sharp_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000
-python train/run_burgers_fno.py --model fno_film --seed 0 --tag burgers_sharp_film_proj_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000 --conserve-mean
-python train/run_burgers_fno.py --model gl_fno_film --seed 0 --tag burgers_sharp_currentgl2_branchwise_proj_seed0_e1000 --data-dir data/burgers_sharp --epochs 1000 --conserve-mean --gl-film-mode branchwise
-python train/run_burgers_fno.py --model vt_fno --seed 0 --tag vt_external_seed0_burgers_sharp --data-dir data/burgers_sharp --epochs 1000
-python train/run_burgers_fno.py --model vt_fno_film --seed 0 --tag vt_film_external_seed0_burgers_sharp --data-dir data/burgers_sharp --epochs 1000
+python train/run_burgers_fno.py --model fno --seed 0 --tag burgers_sharp_core --data-dir data/burgers_sharp --epochs 1000
+python train/run_burgers_fno.py --model fno_film --seed 0 --tag burgers_sharp_core --data-dir data/burgers_sharp --epochs 1000
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag burgers_sharp_core --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_seed0
+```
+
+The targeted projected GL check uses the same data aliases but a separate tag:
+
+```bash
+python train/run_burgers_fno.py --model gl_fno_film --seed 0 --tag burgers_sharp_gl_branchwise_proj --data-dir data/burgers_sharp --epochs 1000 --conserve-mean --gl-film-mode branchwise
+python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0 --tag burgers_sharp_gl_branchwise_proj --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_gl_seed0
 ```
 
 Advection--diffusion:
 
 ```bash
-python train/run_convdiff_fno.py --model fno --seed 0 --tag ad_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
-python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_seed0_film_proj --data-dir data --epochs 500 --conserve-mean
-python train/run_convdiff_fno.py --model gl_fno_film --seed 0 --tag ad_seed0_branchwise_loglag_proj --data-dir data --epochs 500 --log-lag --conserve-mean --gl-film-mode branchwise
-python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag vt_external_seed0_ad --data-dir data --epochs 500
-python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag vt_film_external_seed0_ad --data-dir data --epochs 500
+python train/run_convdiff_fno.py --model fno --seed 0 --tag ad_shared_projection --data-dir data --epochs 500 --conserve-mean
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_shared_projection --data-dir data --epochs 500 --conserve-mean
+python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0 --tag ad_shared_projection --data-dir data --save-dir eval_outputs_ad_seed0
 ```
 
 Navier--Stokes:
 
 ```bash
 # Main matched non-projection protocol
-python train/train_ns_one.py --model fno --seed 0 --tag ns_seed0_fno --data-dir data --epochs 500
-python train/train_ns_one.py --model fno_film --seed 0 --tag ns_seed0_film --data-dir data --epochs 500
+python train/train_ns_one.py --model fno --seed 0 --tag ns_core --data-dir data --epochs 500
+python train/train_ns_one.py --model fno_film --seed 0 --tag ns_core --data-dir data --epochs 500
+python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_core --data-dir data --save-dir eval_outputs_ns_seed0
 
 # Separate mean-zero projection diagnostic
-python train/train_ns_one.py --model fno --seed 0 --tag ns_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
-python train/train_ns_one.py --model fno_film --seed 0 --tag ns_seed0_film_proj --data-dir data --epochs 500 --conserve-mean
-python train/train_ns_one.py --model gl_fno_film --seed 0 --tag ns_seed0_gl_film_ablation --data-dir data --epochs 500 --conserve-mean
-```
-
-Evaluation examples:
-
-```bash
-python eval/eval_burgers_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film,vt_fno,vt_fno_film --data-dir data/burgers_sharp
-python eval/eval_convdiff_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film,vt_fno,vt_fno_film
-python eval/eval_ns_fno.py --seeds 0,1,2,3,4 --models fno,fno_film,gl_fno,gl_fno_film
-python eval/eval_ns_partition_spread.py --models fno,fno_film,gl_fno_film --seeds 0 --partitions 1,2,4,8
+python train/train_ns_one.py --model fno --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
+python train/train_ns_one.py --model fno_film --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
+python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_projection_probe --data-dir data --save-dir eval_outputs_ns_projection_seed0
 ```
 
 When VT baseline runs use seed-indexed tags such as
@@ -211,7 +225,11 @@ intentionally want to filter by model name.
 
 The layerwise lag-sensitivity diagnostic operates on existing checkpoints and
 does not retrain a model. The examples below evaluate one matched seed with 200
-held-out state--lag pairs. Use a smaller `--samples` value for a smoke test.
+held-out state--lag pairs. The first measurement is taken after the spectral
+branch's internal pointwise MLP activation and before the complete FNO block's
+terminal activation. The internal stage key `block0_preactivation` is retained
+for compatibility with existing CSV files. Use a smaller `--samples` value for a
+smoke test.
 
 Original Burgers, seed 0:
 

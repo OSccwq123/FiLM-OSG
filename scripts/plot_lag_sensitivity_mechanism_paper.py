@@ -102,7 +102,7 @@ def main():
                 ax.set_ylabel(f"{name}\nNormalized sensitivity energy")
             if row_index == 0:
                 ax.set_title(
-                    "First FNO block, before activation"
+                    "First-block output before terminal activation"
                     if stage == "block0_preactivation"
                     else "Decoder output (increment rate)"
                 )

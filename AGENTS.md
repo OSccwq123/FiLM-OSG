@@ -9,8 +9,8 @@ Organize training, evaluation, overhead-profiling, and ablation scripts for the 
 ## Current manuscript protocol
 
 Main FNO experiments:
-- Burgers: OSG-FNO vs FiLM-OSG-FNO, seeds {0,1,2}, epochs 1000, batch size 100, sg_pairing=2, sg_weight=5.0, multiscale=True.
-- Advection--diffusion: OSG-FNO vs FiLM-OSG-FNO, seeds {0,1,2}, lag range [0.005,0.5], epochs 500, batch size 100, sg_pairing=1, sg_weight=1.0, multiscale=False.
+- Burgers: OSG-FNO vs FiLM-OSG-FNO, seeds {0,1,2,3,4}, epochs 1000, batch size 100, sg_pairing=2, sg_weight=5.0, multiscale=True.
+- Advection--diffusion: OSG-FNO vs FiLM-OSG-FNO under shared mean-zero projection, seeds {0,1,2,3,4}, lag range [0.005,0.5], epochs 500, batch size 100, sg_pairing=1, sg_weight=1.0, multiscale=False.
 - Navier--Stokes: OSG-FNO vs FiLM-OSG-FNO, seeds {0,1,2,3,4}, epochs 500, batch size 20, sg_pairing=1, sg_weight=1.0, multiscale=False.
 
 Additional Navier--Stokes diagnostics:
@@ -19,6 +19,11 @@ Additional Navier--Stokes diagnostics:
 - Overhead profile: FNO, U-NO-style, Transolver-style direct-lag and FiLM-conditioned variants, representative NS batch size 20.
 - SG ablation: direct-lag / FiLM-conditioned FNO with and without auxiliary semigroup loss, target seeds {0,1,2}.
 - MambaNO-style check is supplementary only, seed-sensitive, not a main portability claim.
+
+Mechanism diagnostic:
+- The public stage key `block0_preactivation` is retained for CSV compatibility.
+- Its measurement is the first-block output after the spectral branch's internal
+  pointwise MLP activation and before the complete block's terminal activation.
 
 ## Important terminology
 

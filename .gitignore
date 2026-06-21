@@ -25,6 +25,7 @@ Thumbs.db
 
 # Experiment logs and generated summaries
 logs*/
+*.log
 nohup.out
 eval_model_roots/
 notes/

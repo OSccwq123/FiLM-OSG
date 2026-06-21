@@ -323,7 +323,7 @@ def main():
 
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.9), sharey=True)
     titles = {
-        "block0_preactivation": "First block, pre-activation",
+        "block0_preactivation": "First-block output before terminal activation",
         "decoder": "Final decoder increment",
     }
     colors = ["#4C78A8", "#D1495B"]
