@@ -49,12 +49,13 @@ data/VorticityOSG_train.mat
 data/VorticityOSG_test.mat
 ```
 
-Burgers and advection--diffusion data can be regenerated locally:
+Burgers and advection--diffusion data can be regenerated locally from the
+repository root. The MATLAB scripts write their outputs into `data/`:
 
 ```matlab
 cd data
-Burgers
-convection_diffusion
+run('../scripts/data_generation/Burgers.m')
+run('../scripts/data_generation/convection_diffusion.m')
 ```
 
 Navier--Stokes uses the public DUE benchmark data format. The repository expects
@@ -154,7 +155,7 @@ Advection--diffusion:
 
 ```bash
 python train/run_convdiff_fno.py --model fno --seed 0 --tag ad_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
-python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_seed0_film_loglag_proj --data-dir data --epochs 500 --log-lag --conserve-mean
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_seed0_film_proj --data-dir data --epochs 500 --conserve-mean
 python train/run_convdiff_fno.py --model gl_fno_film --seed 0 --tag ad_seed0_branchwise_loglag_proj --data-dir data --epochs 500 --log-lag --conserve-mean --gl-film-mode branchwise
 python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag vt_external_seed0_ad --data-dir data --epochs 500
 python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag vt_film_external_seed0_ad --data-dir data --epochs 500
@@ -163,6 +164,11 @@ python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag vt_film_exte
 Navier--Stokes:
 
 ```bash
+# Main matched non-projection protocol
+python train/train_ns_one.py --model fno --seed 0 --tag ns_seed0_fno --data-dir data --epochs 500
+python train/train_ns_one.py --model fno_film --seed 0 --tag ns_seed0_film --data-dir data --epochs 500
+
+# Separate mean-zero projection diagnostic
 python train/train_ns_one.py --model fno --seed 0 --tag ns_seed0_fno_proj --data-dir data --epochs 500 --conserve-mean
 python train/train_ns_one.py --model fno_film --seed 0 --tag ns_seed0_film_proj --data-dir data --epochs 500 --conserve-mean
 python train/train_ns_one.py --model gl_fno_film --seed 0 --tag ns_seed0_gl_film_ablation --data-dir data --epochs 500 --conserve-mean
@@ -201,13 +207,48 @@ intentionally want to filter by model name.
 
 ## Optional Diagnostics
 
+### Post-training lag-sensitivity spectra
+
+The layerwise lag-sensitivity diagnostic operates on existing checkpoints and
+does not retrain a model. The examples below evaluate one matched seed with 200
+held-out state--lag pairs. Use a smaller `--samples` value for a smoke test.
+
+Original Burgers, seed 0:
+
+```bash
+python eval/eval_lag_sensitivity_spectrum.py --benchmark original_burgers --model-seed 0 --direct-model runs_burgers_fno_seed0_burgers_seed01234_final1000/model --film-model runs_burgers_fno_film_seed0_burgers_seed01234_final1000_rerun_seed0/model --data data/BurgersOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/burgers_original_seed0_layerwise
+```
+
+Advection--diffusion under the shared-projection training protocol, seed 0:
+
+```bash
+python eval/eval_lag_sensitivity_spectrum.py --benchmark advection_diffusion --model-seed 0 --direct-model runs_convdiff_fno_seed0_ad_seed0_fullcover_fno_proj/model --film-model runs_convdiff_fno_film_seed0_ad_seed0_fullcover_film_proj/model --data data/test_data.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/ad_seed0_layerwise
+```
+
+Navier--Stokes under the main non-projection protocol, seed 0:
+
+```bash
+python eval/eval_lag_sensitivity_spectrum.py --benchmark navier_stokes --model-seed 0 --direct-model runs_ns_fno_seed0_ns_seed0_full_fno/model --film-model runs_ns_fno_film_seed0_ns_seed0_full_film/model --data data/VorticityOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/ns_seed0_layerwise
+```
+
+After the corresponding seed directories are available, aggregate their means,
+standard deviations, and seed ranges with `scripts/summarize_lag_sensitivity.py`.
+For example:
+
+```bash
+python scripts/summarize_lag_sensitivity.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_lag_sensitivity/burgers_original_5seed_summary
+python scripts/summarize_lag_sensitivity.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ad_5seed_summary
+python scripts/summarize_lag_sensitivity.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ns_5seed_summary
+python scripts/plot_lag_sensitivity_mechanism_paper.py
+```
+
 The advection--diffusion lag-extrapolation diagnostic is not part of the main
 benchmark table. It generates fixed-lag test sets outside the training lag
 interval `[0.005, 0.5]` and evaluates already trained AD models:
 
 ```matlab
 cd data
-convection_diffusion_fixed_lag_extrapolation
+run('../scripts/data_generation/convection_diffusion_fixed_lag_extrapolation.m')
 ```
 
 ```bash

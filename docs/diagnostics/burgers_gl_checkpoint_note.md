@@ -1,4 +1,13 @@
-# Burgers sharp-front GL checkpoint reproducibility note
+# Burgers sharp-front GL checkpoint status
+
+The manuscript-facing sharp-front results use the current-code `currentGL2`
+checkpoints retrained after the global-local implementation was stabilized. The
+five-seed evaluation is stored locally under
+`eval_outputs_burgers_sharp_currentgl2_5seed/`; representative checkpoint tags
+contain `sharp_currentgl2`.
+
+The historical checkpoints described below are obsolete and are not used for
+the manuscript tables or figures.
 
 The historical 5-seed Burgers sharp-front CSV reports finite GL-FNO / GL-FiLM-FNO
 metrics for checkpoints such as
@@ -20,8 +29,8 @@ Observed on 2026-06-03:
 
 This indicates a checkpoint/code-path incompatibility for the historical Burgers
 GL checkpoints, not a plotting failure and not a long-rollout-only instability.
-Because the checkpoint was saved as a full Python object rather than a portable
+Because each checkpoint was saved as a full Python object rather than a portable
 state dict with an explicit config/version record, the exact historical GL
-forward semantics cannot be reconstructed from the checkpoint alone. Until these
-models are retrained or the original class implementation is recovered, Burgers
-GL curves should not be used in manuscript figures or as primary evidence.
+forward semantics cannot be reconstructed from the checkpoint alone. Do not use
+these historical tags for evaluation; use the current-code `currentGL2`
+checkpoints identified above.
