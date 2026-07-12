@@ -54,6 +54,12 @@ def make_config(
     conserve_mean: bool = False,
     gl_film_mode: str = "global_only",
     log_lag: bool = False,
+    learning_rate: float = 1e-3,
+    sg_weight: float = 1.0,
+    modes1: int = 12,
+    modes2: int = 12,
+    depth: int = 4,
+    width: int = 20,
 ):
     return {
         "problem_type": "2d_regular",
@@ -66,7 +72,7 @@ def make_config(
 
         "epochs": epochs,
         "batch_size": batch_size,
-        "learning_rate": 1e-3,
+        "learning_rate": learning_rate,
         "optimizer": "adam",
         "scheduler": "cosine",
         "verbose": 10,
@@ -74,15 +80,15 @@ def make_config(
 
         "nbursts": 25,
         "sg_pairing": 1,
-        "sg_weight": 1.0,
+        "sg_weight": sg_weight,
 
         "activation": "gelu",
 
         # FNO-2D backbone
-        "modes1": 12,
-        "modes2": 12,
-        "depth": 4,
-        "width": 20,
+        "modes1": modes1,
+        "modes2": modes2,
+        "depth": depth,
+        "width": width,
 
         "local_kernel_size": 3,
         "local_pool_factor": 2,
@@ -174,6 +180,12 @@ def train_one(
     hf_warmup_frac: float = 0.1,
     conserve_mean: bool = False,
     gl_film_mode: str = "global_only",
+    learning_rate: float = 1e-3,
+    sg_weight: float = 1.0,
+    modes1: int = 12,
+    modes2: int = 12,
+    depth: int = 4,
+    width: int = 20,
 ):
     suffix = f"_{tag}" if tag else ""
     save_path = os.path.join(save_dir, f"runs_convdiff_{model_name}_seed{seed}{suffix}")
@@ -191,6 +203,12 @@ def train_one(
         conserve_mean=conserve_mean,
         gl_film_mode=gl_film_mode,
         log_lag=log_lag,
+        learning_rate=learning_rate,
+        sg_weight=sg_weight,
+        modes1=modes1,
+        modes2=modes2,
+        depth=depth,
+        width=width,
     )
 
     if model_name in {"vt_fno", "vt_fno_film"}:
@@ -299,6 +317,12 @@ def main():
     parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
     parser.add_argument("--conserve-mean", action="store_true")
     parser.add_argument("--gl-film-mode", type=str, default="global_only", choices=["branchwise", "global_only"])
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--sg-weight", type=float, default=1.0)
+    parser.add_argument("--modes1", type=int, default=12)
+    parser.add_argument("--modes2", type=int, default=12)
+    parser.add_argument("--depth", type=int, default=4)
+    parser.add_argument("--width", type=int, default=20)
     args = parser.parse_args()
 
     train_one(
@@ -318,6 +342,12 @@ def main():
         hf_warmup_frac=args.hf_warmup_frac,
         conserve_mean=args.conserve_mean,
         gl_film_mode=args.gl_film_mode,
+        learning_rate=args.learning_rate,
+        sg_weight=args.sg_weight,
+        modes1=args.modes1,
+        modes2=args.modes2,
+        depth=args.depth,
+        width=args.width,
     )
 
 

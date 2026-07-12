@@ -27,8 +27,13 @@ Thumbs.db
 logs*/
 *.log
 nohup.out
+*.pid
 eval_model_roots/
 notes/
+tmp/
+docs/internal/
+B1_B2_RUN_NOTE_*.md
+PDEBENCH_RUN_QUEUE_*.md
 
 # Generated datasets under data subdirectories
 /data/*/
@@ -57,3 +62,5 @@ scripts/launch_ad_formal7_seed1_4_pool.sh
 scripts/launch_ns_seed1_4_selected_after_ad.sh
 scripts/smoke_old_checkpoints.py
 scripts/run_paper_experiments.sh
+scripts/data_generation/prepare_pdebench_swe_osg.sh
+scripts/data_generation/*realpdebench*

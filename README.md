@@ -90,6 +90,66 @@ support, copy the two files to the compatibility names instead. The check script
 writes `sanity_summary.json`, and the plot script writes a PDF with selected
 trajectory examples.
 
+### PDEBench-derived variable-lag checks
+
+The manuscript also uses the public PDEBench radial-dam-break and two-dimensional
+diffusion--reaction time series; see the
+[PDEBench paper](https://proceedings.neurips.cc/paper_files/paper/2022/hash/0a9747136d411fb83f0cf81820d44afb-Abstract-Datasets_and_Benchmarks.html).
+Download the HDF5 files from the
+[PDEBench archive](https://doi.org/10.18419/darus-2986) and place them locally as
+
+```text
+data/pdebench_raw/swe/2D_rdb_NA_NA.h5
+data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5
+```
+
+The raw files are not redistributed by this repository. The commands below
+reproduce the manuscript's converted-data protocol: component 0, a `64 x 64`
+grid obtained with spatial stride 2, 5,000 training pairs, 1,000 test pairs,
+and temporal offsets from 1 to 20 stored steps.
+
+SWE64:
+
+```bash
+python scripts/data_generation/convert_pdebench_to_osg.py \
+  --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 \
+  --output-dir data/pdebench_osg/swe64 \
+  --prefix PDEBenchSWE64OSG --problem-dim 2d --grouped --layout HWD \
+  --component 0 --train-pairs 5000 --test-pairs 1000 \
+  --min-lag-steps 1 --max-lag-steps 20 --space-stride 2 --seed 0
+python scripts/data_generation/check_osg_mat_data.py \
+  --train data/pdebench_osg/swe64/PDEBenchSWE64OSG_train.mat \
+  --test data/pdebench_osg/swe64/PDEBenchSWE64OSG_test.mat \
+  --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchSWE64OSG_train.mat data/pdebench_osg/swe64/train_data.mat
+ln -sfn PDEBenchSWE64OSG_test.mat data/pdebench_osg/swe64/test_data.mat
+```
+
+ReacDiff64:
+
+```bash
+python scripts/data_generation/convert_pdebench_to_osg.py \
+  --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 \
+  --output-dir data/pdebench_osg/reacdiff64 \
+  --prefix PDEBenchReacDiff64OSG --problem-dim 2d --grouped --layout HWD \
+  --component 0 --train-pairs 5000 --test-pairs 1000 \
+  --min-lag-steps 1 --max-lag-steps 20 --space-stride 2 --seed 0
+python scripts/data_generation/check_osg_mat_data.py \
+  --train data/pdebench_osg/reacdiff64/PDEBenchReacDiff64OSG_train.mat \
+  --test data/pdebench_osg/reacdiff64/PDEBenchReacDiff64OSG_test.mat \
+  --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchReacDiff64OSG_train.mat data/pdebench_osg/reacdiff64/train_data.mat
+ln -sfn PDEBenchReacDiff64OSG_test.mat data/pdebench_osg/reacdiff64/test_data.mat
+```
+
+On systems without symbolic-link support, copy each generated file to the
+corresponding `train_data.mat` or `test_data.mat` compatibility name. For this
+protocol, the train and test pair sets are sampled independently from the same
+pool of 1,000 trajectories. They are held out at the pair level and do not test
+generalization to unseen trajectories. Each pair contains one transition, so
+the resulting errors are pairwise variable-lag errors rather than long-rollout
+metrics. This conversion is not the standard PDEBench leaderboard protocol.
+
 ## Implemented Models and Options
 
 The main FNO entrypoints expose the following model families:
@@ -112,6 +172,10 @@ Important training options:
 --hf-warmup-frac       fraction of epochs used to warm up high-frequency losses
 --gl-film-mode         global_only or branchwise FiLM modulation for GL models
 --log-lag              use log-lag conditioning for advection--diffusion
+--learning-rate        initial Adam learning rate
+--sg-weight            semigroup-loss weight for advection--diffusion/PDEBench
+--modes1/--modes2      retained Fourier modes for the 2D backbone
+--depth/--width        2D FNO depth and latent width
 ```
 
 The VT baselines intentionally disable semigroup regularization, projection, and
@@ -183,6 +247,36 @@ python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_shared_proje
 python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0 --tag ad_shared_projection --data-dir data --save-dir eval_outputs_ad_seed0
 ```
 
+PDEBench-derived single-transition checks use the same `12 x 12` modes, depth
+4, width 20, Adam/cosine schedule, initial learning rate `1e-3`, 500 epochs,
+batch size 100, and seed across the four conditioning families. OSG models use
+one semigroup pairing with unit weight; the training entrypoint disables the
+semigroup objective for the matched direct-time controls.
+
+SWE64, seed 0:
+
+```bash
+python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
+python eval/eval_convdiff_fno.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --save-dir eval_outputs_pdebench_swe64_seed0
+```
+
+ReacDiff64, seed 0:
+
+```bash
+python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
+python eval/eval_convdiff_fno.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --save-dir eval_outputs_pdebench_reacdiff64_seed0
+```
+
+The evaluator reports relative errors, frequency-band errors, and spectrum
+error. Since each converted sample contains one transition, its mean and final
+relative errors coincide; these commands are not long-rollout evaluations.
+
 Navier--Stokes:
 
 ```bash
@@ -195,6 +289,10 @@ python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_core --data-
 python train/train_ns_one.py --model fno --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
 python train/train_ns_one.py --model fno_film --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
 python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_projection_probe --data-dir data --save-dir eval_outputs_ns_projection_seed0
+
+# Smaller-learning-rate direct-lag robustness check used in the NS baseline audit
+python train/train_ns_one.py --model fno --seed 0 --tag ns_directlag_lr5e4 --data-dir data --epochs 500 --learning-rate 5e-4
+python eval/eval_ns_fno.py --models fno --seeds 0 --tag ns_directlag_lr5e4 --data-dir data --save-dir eval_outputs_ns_directlag_lr5e4_seed0
 ```
 
 When VT baseline runs use seed-indexed tags such as
@@ -257,8 +355,14 @@ For example:
 python scripts/summarize_lag_sensitivity.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_lag_sensitivity/burgers_original_5seed_summary
 python scripts/summarize_lag_sensitivity.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ad_5seed_summary
 python scripts/summarize_lag_sensitivity.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ns_5seed_summary
+python scripts/summarize_lag_sensitivity_scalar_metrics.py --root eval_outputs_lag_sensitivity --seeds 0,1,2,3,4 --out-dir eval_outputs_lag_sensitivity/scalar_summary
 python scripts/plot_lag_sensitivity_mechanism_paper.py
 ```
+
+The scalar summary reports nonzero-band energy and effective rank. Burgers uses
+`k<10`; advection--diffusion and Navier--Stokes use the conservative low radial
+band `|k|<12`, while effective rank is computed over the full diagnostic
+spectrum.
 
 The advection--diffusion lag-extrapolation diagnostic is not part of the main
 benchmark table. It generates fixed-lag test sets outside the training lag

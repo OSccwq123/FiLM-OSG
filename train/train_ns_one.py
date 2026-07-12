@@ -46,6 +46,7 @@ def make_config(
     seed: int = 0,
     epochs: int = 500,
     batch_size: int = 20,
+    learning_rate: float = 1e-3,
     device: str | None = None,
     hf_weight: float = 0.0,
     hf_sg_weight: float = 0.0,
@@ -77,7 +78,7 @@ def make_config(
 
         "epochs": epochs,
         "batch_size": batch_size,
-        "learning_rate": 1e-3,
+        "learning_rate": float(learning_rate),
         "optimizer": "adam",
         "scheduler": "cosine",
         "verbose": 10,
@@ -156,6 +157,7 @@ def train_one(
     seed: int,
     epochs: int = 500,
     batch_size: int = 20,
+    learning_rate: float = 1e-3,
     tag: str = "",
     overwrite: bool = True,
     save_dir: str = ".",
@@ -190,6 +192,7 @@ def train_one(
         seed=seed,
         epochs=epochs,
         batch_size=batch_size,
+        learning_rate=learning_rate,
         device=device,
         hf_weight=hf_weight,
         hf_sg_weight=hf_sg_weight,
@@ -301,6 +304,7 @@ def main():
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=20)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--tag", type=str, default="")
     parser.add_argument("--save-dir", type=str, default=".")
     parser.add_argument("--device", type=str, default=None)
@@ -332,6 +336,7 @@ def main():
         seed=args.seed,
         epochs=args.epochs,
         batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
         tag=args.tag,
         overwrite=not args.no_overwrite,
         save_dir=args.save_dir,
