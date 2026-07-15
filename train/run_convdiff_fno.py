@@ -60,10 +60,11 @@ def make_config(
     modes2: int = 12,
     depth: int = 4,
     width: int = 20,
+    problem_dim: int = 1,
 ):
     return {
         "problem_type": "2d_regular",
-        "problem_dim": 1,
+        "problem_dim": int(problem_dim),
         "multiscale": log_lag,
         "dtype": "float32",
 
@@ -186,6 +187,7 @@ def train_one(
     modes2: int = 12,
     depth: int = 4,
     width: int = 20,
+    problem_dim: int | None = None,
 ):
     suffix = f"_{tag}" if tag else ""
     save_path = os.path.join(save_dir, f"runs_convdiff_{model_name}_seed{seed}{suffix}")
@@ -209,6 +211,7 @@ def train_one(
         modes2=modes2,
         depth=depth,
         width=width,
+        problem_dim=problem_dim or 1,
     )
 
     if model_name in {"vt_fno", "vt_fno_film"}:
@@ -245,6 +248,13 @@ def train_one(
     trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
         train_path, test_path
     )
+    inferred_problem_dim = int(trainY.shape[-1])
+    if problem_dim is not None and int(problem_dim) != inferred_problem_dim:
+        raise ValueError(
+            f"Requested problem_dim={problem_dim}, but the training data contain "
+            f"{inferred_problem_dim} state channels."
+        )
+    config["problem_dim"] = inferred_problem_dim
 
     print("============================================================", flush=True)
     print(f"Model: {model_name}, seed={seed}", flush=True)
@@ -266,6 +276,7 @@ def train_one(
         "modes2": config["modes2"],
         "depth": config["depth"],
         "width": config["width"],
+        "problem_dim": config["problem_dim"],
         "hf_weight": config["hf_weight"],
         "hf_sg_weight": config["hf_sg_weight"],
         "hf_warmup_frac": config["hf_warmup_frac"],
@@ -323,6 +334,12 @@ def main():
     parser.add_argument("--modes2", type=int, default=12)
     parser.add_argument("--depth", type=int, default=4)
     parser.add_argument("--width", type=int, default=20)
+    parser.add_argument(
+        "--problem-dim",
+        type=int,
+        default=None,
+        help="Optional state-channel assertion; otherwise inferred from trainY.",
+    )
     args = parser.parse_args()
 
     train_one(
@@ -348,6 +365,7 @@ def main():
         modes2=args.modes2,
         depth=args.depth,
         width=args.width,
+        problem_dim=args.problem_dim,
     )
 
 

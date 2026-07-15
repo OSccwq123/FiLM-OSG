@@ -11,10 +11,6 @@ For a variable-lag task from a fixed-time PDEBench trajectory, this script
 samples pairs (u(t_i), u(t_j)) and stores each pair as a two-frame trajectory.
 The downstream OSG loader can then consume the file without changing the
 training code: the only adjacent transition has lag t_j - t_i.
-
-For grouped PDEBench files, the current paper protocol samples the train and
-test pair sets independently from the same trajectory pool. It is therefore a
-pair-level held-out split, not a trajectory-disjoint generalization test.
 """
 
 from __future__ import annotations
@@ -82,6 +78,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--group-data-key", default="data", help="Dataset name inside each trajectory group.")
     parser.add_argument("--max-trajectories", type=int, default=None, help="Optional limit on grouped trajectories.")
+    parser.add_argument(
+        "--train-trajectories",
+        type=int,
+        default=None,
+        help="Number of grouped trajectories reserved for training pairs.",
+    )
+    parser.add_argument(
+        "--test-trajectories",
+        type=int,
+        default=None,
+        help="Number of disjoint grouped trajectories reserved for test pairs.",
+    )
+    parser.add_argument(
+        "--trajectory-split-seed",
+        type=int,
+        default=0,
+        help="Seed used only for the grouped trajectory-level train/test split.",
+    )
     parser.add_argument(
         "--layout",
         default="auto",
@@ -380,6 +394,42 @@ def normalize_group_frame(raw: np.ndarray, problem_dim: str, component: int | No
     return arr
 
 
+def balanced_group_schedule(group_keys: list[str], n_pairs: int, rng: np.random.Generator) -> list[str]:
+    """Assign pairs approximately uniformly while covering every selected trajectory."""
+    if n_pairs < len(group_keys):
+        raise ValueError(
+            f"n_pairs={n_pairs} is smaller than the selected trajectory count "
+            f"{len(group_keys)}; every trajectory must contribute at least one pair."
+        )
+    repeats, remainder = divmod(n_pairs, len(group_keys))
+    schedule = list(group_keys) * repeats
+    if remainder:
+        schedule.extend(np.asarray(group_keys)[rng.permutation(len(group_keys))[:remainder]].tolist())
+    rng.shuffle(schedule)
+    return schedule
+
+
+def split_group_keys(group_keys: list[str], args: argparse.Namespace) -> tuple[list[str], list[str]]:
+    requested = (args.train_trajectories, args.test_trajectories)
+    if requested == (None, None):
+        return group_keys, group_keys
+    if any(value is None for value in requested):
+        raise ValueError("--train-trajectories and --test-trajectories must be provided together.")
+    if args.train_trajectories < 1 or args.test_trajectories < 1:
+        raise ValueError("Trajectory split sizes must be positive.")
+    total = args.train_trajectories + args.test_trajectories
+    if total > len(group_keys):
+        raise ValueError(f"Requested {total} trajectories but only {len(group_keys)} are available.")
+    split_rng = np.random.default_rng(args.trajectory_split_seed)
+    shuffled = np.asarray(group_keys)[split_rng.permutation(len(group_keys))[:total]].tolist()
+    train_keys = shuffled[: args.train_trajectories]
+    test_keys = shuffled[args.train_trajectories :]
+    overlap = set(train_keys).intersection(test_keys)
+    if overlap:
+        raise RuntimeError(f"Trajectory-level split overlap detected: {sorted(overlap)[:5]}")
+    return train_keys, test_keys
+
+
 def sample_pairs_grouped(h5, group_keys: list[str], args: argparse.Namespace, n_pairs: int, rng: np.random.Generator):
     first_group = h5[group_keys[0]]
     dataset = first_group[args.group_data_key]
@@ -396,8 +446,8 @@ def sample_pairs_grouped(h5, group_keys: list[str], args: argparse.Namespace, n_
         pairs = np.empty((n_pairs, first_frame.shape[0], first_frame.shape[1], first_frame.shape[2], 2), dtype=first_frame.dtype)
     dt = np.empty((n_pairs, 1), dtype=np.float64)
 
-    for idx in range(n_pairs):
-        group_key = group_keys[int(rng.integers(0, len(group_keys)))]
+    group_schedule = balanced_group_schedule(group_keys, n_pairs, rng)
+    for idx, group_key in enumerate(group_schedule):
         group = h5[group_key]
         data = group[args.group_data_key]
         lag = int(rng.integers(args.min_lag_steps, max_lag_steps + 1))
@@ -445,7 +495,8 @@ def main() -> None:
             "`conda install h5py`, then rerun this script."
         ) from exc
     h5py = _h5py
-    rng = np.random.default_rng(args.seed)
+    train_rng = np.random.default_rng(args.seed)
+    test_rng = np.random.default_rng(args.seed + 1)
     with h5py.File(args.input, "r") as h5:
         group_keys = numeric_group_keys(h5)
         use_grouped = args.grouped or (args.data_key is None and group_keys and args.group_data_key in h5[group_keys[0]])
@@ -454,18 +505,32 @@ def main() -> None:
                 group_keys = group_keys[: args.max_trajectories]
             if not group_keys:
                 raise ValueError("No numeric trajectory groups found for --grouped conversion.")
+            train_group_keys, test_group_keys = split_group_keys(group_keys, args)
             train_data, train_dt, coords, n_time, max_lag = sample_pairs_grouped(
-                h5, group_keys, args, args.train_pairs, rng
+                h5, train_group_keys, args, args.train_pairs, train_rng
             )
             test_data, test_dt, _, _, _ = sample_pairs_grouped(
-                h5, group_keys, args, args.test_pairs, rng
+                h5, test_group_keys, args, args.test_pairs, test_rng
             )
+            overlap = sorted(set(train_group_keys).intersection(test_group_keys))
+            disjoint = not overlap
+            if args.train_trajectories is not None and not disjoint:
+                raise RuntimeError("Grouped train/test trajectory split is not disjoint.")
             data_key = f"<group>/{args.group_data_key}"
             metadata = {
                 "input": str(args.input),
                 "data_key": data_key,
                 "grouped": True,
                 "n_groups": len(group_keys),
+                "trajectory_split": "disjoint" if args.train_trajectories is not None else "shared_pool",
+                "trajectory_split_seed": args.trajectory_split_seed,
+                "train_trajectory_count": len(train_group_keys),
+                "test_trajectory_count": len(test_group_keys),
+                "train_group_ids": train_group_keys,
+                "test_group_ids": test_group_keys,
+                "train_test_group_overlap": overlap,
+                "train_test_groups_disjoint": disjoint,
+                "pair_sampling": "balanced_by_trajectory",
                 "layout": args.layout,
                 "problem_dim": args.problem_dim,
                 "component": args.component,
@@ -475,7 +540,8 @@ def main() -> None:
                 "max_lag_steps": max_lag,
                 "time_stride": args.time_stride,
                 "space_stride": args.space_stride,
-                "seed": args.seed,
+                "pair_seed_train": args.seed,
+                "pair_seed_test": args.seed + 1,
                 "trajectories_shape_train": list(train_data.shape),
                 "trajectories_shape_test": list(test_data.shape),
                 "coordinates_shape": list(coords.shape),
@@ -516,8 +582,14 @@ def main() -> None:
         coords = make_coordinates(h5, args.problem_dim, data.shape, args)
 
     max_lag = args.max_lag_steps or (n_time - 1)
-    train_data, train_dt = sample_pairs(data, times, args.train_pairs, args.min_lag_steps, max_lag, rng, args.problem_dim)
-    test_data, test_dt = sample_pairs(data, times, args.test_pairs, args.min_lag_steps, max_lag, rng, args.problem_dim)
+    if args.train_trajectories is not None or args.test_trajectories is not None:
+        raise ValueError("Trajectory-disjoint splitting currently requires grouped PDEBench input.")
+    train_data, train_dt = sample_pairs(
+        data, times, args.train_pairs, args.min_lag_steps, max_lag, train_rng, args.problem_dim
+    )
+    test_data, test_dt = sample_pairs(
+        data, times, args.test_pairs, args.min_lag_steps, max_lag, test_rng, args.problem_dim
+    )
 
     train_path = args.output_dir / f"{args.prefix}_train.mat"
     test_path = args.output_dir / f"{args.prefix}_test.mat"
@@ -533,7 +605,8 @@ def main() -> None:
         "max_lag_steps": max_lag,
         "time_stride": args.time_stride,
         "space_stride": args.space_stride,
-        "seed": args.seed,
+        "pair_seed_train": args.seed,
+        "pair_seed_test": args.seed + 1,
         "trajectories_shape_train": list(train_data.shape),
         "trajectories_shape_test": list(test_data.shape),
         "coordinates_shape": list(coords.shape),

@@ -104,25 +104,31 @@ data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5
 ```
 
 The raw files are not redistributed by this repository. The commands below
-reproduce the manuscript's converted-data protocol: component 0, a `64 x 64`
-grid obtained with spatial stride 2, 5,000 training pairs, 1,000 test pairs,
-and temporal offsets from 1 to 20 stored steps.
+reproduce the manuscript's trajectory-disjoint converted-data protocol. A
+fixed split seed assigns 800 source trajectories to training and 200 to test;
+the two trajectory-ID sets do not overlap. Pair sampling is approximately
+balanced by trajectory and creates 5,000 training pairs and 1,000 test pairs
+with temporal offsets from 1 to 20 stored steps. No `--component` argument is
+used: SWE retains its native scalar state, whereas reaction--diffusion retains
+both coupled state components.
 
 SWE64:
 
 ```bash
 python scripts/data_generation/convert_pdebench_to_osg.py \
   --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 \
-  --output-dir data/pdebench_osg/swe64 \
-  --prefix PDEBenchSWE64OSG --problem-dim 2d --grouped --layout HWD \
-  --component 0 --train-pairs 5000 --test-pairs 1000 \
+  --output-dir data/pdebench_osg/swe64_disjoint_full \
+  --prefix PDEBenchSWE64DisjointFullOSG \
+  --problem-dim 2d --grouped --layout HWD \
+  --train-trajectories 800 --test-trajectories 200 \
+  --trajectory-split-seed 0 --train-pairs 5000 --test-pairs 1000 \
   --min-lag-steps 1 --max-lag-steps 20 --space-stride 2 --seed 0
 python scripts/data_generation/check_osg_mat_data.py \
-  --train data/pdebench_osg/swe64/PDEBenchSWE64OSG_train.mat \
-  --test data/pdebench_osg/swe64/PDEBenchSWE64OSG_test.mat \
+  --train data/pdebench_osg/swe64_disjoint_full/PDEBenchSWE64DisjointFullOSG_train.mat \
+  --test data/pdebench_osg/swe64_disjoint_full/PDEBenchSWE64DisjointFullOSG_test.mat \
   --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
-ln -sfn PDEBenchSWE64OSG_train.mat data/pdebench_osg/swe64/train_data.mat
-ln -sfn PDEBenchSWE64OSG_test.mat data/pdebench_osg/swe64/test_data.mat
+ln -sfn PDEBenchSWE64DisjointFullOSG_train.mat data/pdebench_osg/swe64_disjoint_full/train_data.mat
+ln -sfn PDEBenchSWE64DisjointFullOSG_test.mat data/pdebench_osg/swe64_disjoint_full/test_data.mat
 ```
 
 ReacDiff64:
@@ -130,25 +136,47 @@ ReacDiff64:
 ```bash
 python scripts/data_generation/convert_pdebench_to_osg.py \
   --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 \
-  --output-dir data/pdebench_osg/reacdiff64 \
-  --prefix PDEBenchReacDiff64OSG --problem-dim 2d --grouped --layout HWD \
-  --component 0 --train-pairs 5000 --test-pairs 1000 \
+  --output-dir data/pdebench_osg/reacdiff64_disjoint_full \
+  --prefix PDEBenchReacDiff64DisjointFullOSG \
+  --problem-dim 2d --grouped --layout HWD \
+  --train-trajectories 800 --test-trajectories 200 \
+  --trajectory-split-seed 0 --train-pairs 5000 --test-pairs 1000 \
   --min-lag-steps 1 --max-lag-steps 20 --space-stride 2 --seed 0
 python scripts/data_generation/check_osg_mat_data.py \
-  --train data/pdebench_osg/reacdiff64/PDEBenchReacDiff64OSG_train.mat \
-  --test data/pdebench_osg/reacdiff64/PDEBenchReacDiff64OSG_test.mat \
-  --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
-ln -sfn PDEBenchReacDiff64OSG_train.mat data/pdebench_osg/reacdiff64/train_data.mat
-ln -sfn PDEBenchReacDiff64OSG_test.mat data/pdebench_osg/reacdiff64/test_data.mat
+  --train data/pdebench_osg/reacdiff64_disjoint_full/PDEBenchReacDiff64DisjointFullOSG_train.mat \
+  --test data/pdebench_osg/reacdiff64_disjoint_full/PDEBenchReacDiff64DisjointFullOSG_test.mat \
+  --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchReacDiff64DisjointFullOSG_train.mat data/pdebench_osg/reacdiff64_disjoint_full/train_data.mat
+ln -sfn PDEBenchReacDiff64DisjointFullOSG_test.mat data/pdebench_osg/reacdiff64_disjoint_full/test_data.mat
+```
+
+ReacDiff128 uses the same trajectory IDs and pair seeds as ReacDiff64, but does
+not spatially subsample the source grid:
+
+```bash
+python scripts/data_generation/convert_pdebench_to_osg.py \
+  --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 \
+  --output-dir data/pdebench_osg/reacdiff128_disjoint_full \
+  --prefix PDEBenchReacDiff128DisjointFullOSG \
+  --problem-dim 2d --grouped --layout HWD \
+  --train-trajectories 800 --test-trajectories 200 \
+  --trajectory-split-seed 0 --train-pairs 5000 --test-pairs 1000 \
+  --min-lag-steps 1 --max-lag-steps 20 --space-stride 1 --seed 0
+python scripts/data_generation/check_osg_mat_data.py \
+  --train data/pdebench_osg/reacdiff128_disjoint_full/PDEBenchReacDiff128DisjointFullOSG_train.mat \
+  --test data/pdebench_osg/reacdiff128_disjoint_full/PDEBenchReacDiff128DisjointFullOSG_test.mat \
+  --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchReacDiff128DisjointFullOSG_train.mat data/pdebench_osg/reacdiff128_disjoint_full/train_data.mat
+ln -sfn PDEBenchReacDiff128DisjointFullOSG_test.mat data/pdebench_osg/reacdiff128_disjoint_full/test_data.mat
 ```
 
 On systems without symbolic-link support, copy each generated file to the
-corresponding `train_data.mat` or `test_data.mat` compatibility name. For this
-protocol, the train and test pair sets are sampled independently from the same
-pool of 1,000 trajectories. They are held out at the pair level and do not test
-generalization to unseen trajectories. Each pair contains one transition, so
-the resulting errors are pairwise variable-lag errors rather than long-rollout
-metrics. This conversion is not the standard PDEBench leaderboard protocol.
+corresponding `train_data.mat` or `test_data.mat` compatibility name. The
+converter writes a metadata JSON containing the selected trajectory IDs, split
+seed, overlap check, channel count, pair seeds, and lag range. Each pair contains
+one transition, so the resulting errors are pairwise variable-lag errors rather
+than long-rollout metrics. This conversion is not the standard PDEBench
+leaderboard protocol.
 
 ## Implemented Models and Options
 
@@ -176,6 +204,7 @@ Important training options:
 --sg-weight            semigroup-loss weight for advection--diffusion/PDEBench
 --modes1/--modes2      retained Fourier modes for the 2D backbone
 --depth/--width        2D FNO depth and latent width
+--problem-dim          optional assertion for the number of state channels
 ```
 
 The VT baselines intentionally disable semigroup regularization, projection, and
@@ -247,35 +276,46 @@ python train/run_convdiff_fno.py --model fno_film --seed 0 --tag ad_shared_proje
 python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0 --tag ad_shared_projection --data-dir data --save-dir eval_outputs_ad_seed0
 ```
 
-PDEBench-derived single-transition checks use the same `12 x 12` modes, depth
-4, width 20, Adam/cosine schedule, initial learning rate `1e-3`, 500 epochs,
-batch size 100, and seed across the four conditioning families. OSG models use
-one semigroup pairing with unit weight; the training entrypoint disables the
-semigroup objective for the matched direct-time controls.
+PDEBench-derived single-transition checks use `12 x 12` modes, depth 4, width
+20, an Adam/cosine schedule, initial learning rate `1e-3`, and 500 epochs. The
+two `64 x 64` checks use batch size 100; the `128 x 128` check uses batch size
+20 for memory. OSG models use one semigroup pairing with unit weight; the
+training entrypoint disables the semigroup objective for the matched direct-time
+controls. Comparisons are matched within each resolution, not across resolutions.
 
 SWE64, seed 0:
 
 ```bash
-python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
-python eval/eval_convdiff_fno.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_swe64_single_seed --data-dir data/pdebench_osg/swe64 --save-dir eval_outputs_pdebench_swe64_seed0
+python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
+python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --save-dir eval_outputs_pdebench_swe64_disjoint_full_seed0
 ```
 
 ReacDiff64, seed 0:
 
 ```bash
-python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
-python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20
-python eval/eval_convdiff_fno.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_reacdiff64_single_seed --data-dir data/pdebench_osg/reacdiff64 --save-dir eval_outputs_pdebench_reacdiff64_seed0
+python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_reacdiff64_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_reacdiff64_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python train/run_convdiff_fno.py --model vt_fno --seed 0 --tag pdebench_reacdiff64_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --tag pdebench_reacdiff64_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0 --tag pdebench_reacdiff64_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff64_disjoint_full --save-dir eval_outputs_pdebench_reacdiff64_disjoint_full_seed0
 ```
 
-The evaluator reports relative errors, frequency-band errors, and spectrum
-error. Since each converted sample contains one transition, its mean and final
-relative errors coincide; these commands are not long-rollout evaluations.
+ReacDiff128, seed 0:
+
+```bash
+python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_reacdiff128_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff128_disjoint_full --epochs 500 --batch-size 20 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_reacdiff128_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff128_disjoint_full --epochs 500 --batch-size 20 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 2
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film --seeds 0 --tag pdebench_reacdiff128_disjoint_full_seed0 --data-dir data/pdebench_osg/reacdiff128_disjoint_full --save-dir eval_outputs_pdebench_reacdiff128_disjoint_full_seed0
+```
+
+The formal evaluator reports aggregate and channel-wise relative errors,
+frequency-band errors, and spectrum error. Since each converted sample contains
+one transition, its mean and final relative errors coincide; these commands are
+not long-rollout evaluations. Repeat the matched commands with seeds 1--4 to
+construct the manuscript's population summaries.
 
 Navier--Stokes:
 
