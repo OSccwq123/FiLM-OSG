@@ -207,9 +207,10 @@ Important training options:
 --problem-dim          optional assertion for the number of state channels
 ```
 
-The VT baselines intentionally disable semigroup regularization, projection, and
-high-frequency losses inside the training scripts. They are included as external
-variable-time baselines, not as OSG variants.
+The matched VT baselines directly predict the queried next state and omit both
+the OSG outer-increment parameterization and the auxiliary semigroup objective.
+They share data pairs and optimization settings with the corresponding OSG runs
+but are not OSG variants.
 
 ## Quick Checks
 
@@ -223,6 +224,7 @@ python eval/eval_burgers_fno.py --help
 python eval/eval_convdiff_fno.py --help
 python eval/eval_ns_fno.py --help
 python eval/eval_ns_partition_spread.py --help
+python eval/eval_ns_partition_robustness_paper.py --help
 python profiling/profile_ns_overhead.py --help
 python profiling/profile_gl_overhead.py --help
 python scripts/smoke_new_features.py --help
@@ -235,6 +237,7 @@ python train/run_burgers_fno.py --model gl_fno_film --seed 0 --dry-run --conserv
 python train/run_convdiff_fno.py --model vt_fno_film --seed 0 --dry-run
 python train/train_ns_one.py --model gl_fno_film --seed 0 --dry-run --conserve-mean
 python eval/eval_burgers_fno.py --check-only --skip-missing
+python eval/eval_ns_partition_robustness_paper.py --check-only --skip-missing
 ```
 
 ## Representative Single-Seed Experiment Commands
@@ -358,6 +361,28 @@ Launchers print the PyTorch-visible GPU mapping with
 intentionally want to filter by model name.
 
 ## Optional Diagnostics
+
+### Navier--Stokes partition robustness
+
+Two partition diagnostics are provided and should not be interchanged. The
+manuscript-matched evaluation uses terminal times `20,40,60,80`, the shared
+uniform/fine/alternating partition set, and eight fixed random paired
+partitions. Every sub-lag lies in `[0.5,1.5]`. Its reported spread is the mean
+over all unordered partition pairs of
+`||U_hat_pi(T)-U_hat_pj(T)||_2 / ||U(T)||_2`, with the same partition set used
+for every model and training seed:
+
+```bash
+python eval/eval_ns_partition_robustness_paper.py --models fno,fno_film --seeds 0 --tag ns_core --model-root . --data-dir data --save-dir eval_outputs_ns_partition_seed0
+```
+
+The older `eval_ns_partition_spread.py` instead compares equal partitions with
+`1,2,4,8` substeps and uses a symmetric prediction-pair denominator; it is a
+separate full/high-frequency spread diagnostic:
+
+```bash
+python eval/eval_ns_partition_spread.py --models fno,fno_film --seeds 0 --tag ns_core --model-root . --data-dir data --save-dir eval_outputs_ns_equal_partition_seed0
+```
 
 ### Post-training lag-sensitivity spectra
 
