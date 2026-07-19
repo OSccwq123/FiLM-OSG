@@ -17,12 +17,13 @@ The active code path uses the local `film_osg` package and does not require the
 external `due` package. Compatibility aliases are kept for older DUE-style model
 files.
 
-The manuscript tables use seed-indexed runs, with five-seed summaries reported
-for the main Burgers, advection--diffusion, and selected sharp-front/VT controls
-unless a table is explicitly labeled as a seed-0 diagnostic. Full multi-seed
-reproduction is intended for cluster scheduling rather than a single bundled
-launcher. The profiling scripts report model parameters, training-step time,
-inference-step time, and peak CUDA memory for the hardware used by the user.
+The manuscript uses seeds `{0,1,2,3,4}` for the reported Original Burgers,
+advection--diffusion, Navier--Stokes, PDEBench-derived pair comparisons, and the
+specified sharp-front/VT results. Tables explicitly labeled as pilot or
+auxiliary checks may use fewer seeds. Full multi-seed reproduction is intended
+for cluster scheduling rather than a single bundled launcher. The profiling
+scripts report model parameters, training-step time, inference-step time, and
+peak CUDA memory for the hardware used by the user.
 
 ## Setup
 
@@ -429,9 +430,10 @@ The scalar summary reports nonzero-band energy and effective rank. Burgers uses
 band `|k|<12`, while effective rank is computed over the full diagnostic
 spectrum.
 
-The advection--diffusion lag-extrapolation diagnostic is not part of the main
-benchmark table. It generates fixed-lag test sets outside the training lag
-interval `[0.005, 0.5]` and evaluates already trained AD models:
+The separate advection--diffusion fixed-lag evaluation is reported in the main
+text apart from the core random-lag AD comparison. It generates fixed-lag test
+sets outside the training lag interval `[0.005, 0.5]` and evaluates the already
+trained AD models over seeds `{0,1,2,3,4}`:
 
 ```matlab
 cd data
@@ -439,7 +441,7 @@ run('../scripts/data_generation/convection_diffusion_fixed_lag_extrapolation.m')
 ```
 
 ```bash
-python eval/eval_convdiff_lag_extrapolation.py --models fno,fno_film --seeds 0,1,2 --tag ad_affine_seed012 --data-dir data
+python eval/eval_convdiff_lag_extrapolation.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_affine_seed01234 --data-dir data
 ```
 
 ## Layout
