@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""Generate variable-lag sharp-front inviscid Burgers OSG data with conservative averaging.
-
-Equation:
-    u_t + (u^2 / 2)_x = 0,  x in [0, 1],
-
-with periodic boundary conditions.
-
-Numerical solver:
-    - fine-grid method-of-lines finite-volume discretization
-    - Rusanov / local Lax-Friedrichs flux
-    - RK4 time integration
-    - adaptive internal time step controlled by advective CFL
-    - conservative averaging from fine grid to coarse grid
-
-Output .mat structure:
-    trajectories : (ntraj, coarse_n, 1, nsnaps), float32
-    dt           : (ntraj, nsnaps - 1), float32
-    coordinates  : (coarse_n, 1), float32
-
-Output files:
-    BurgersSharpOSG_train.mat
-    BurgersSharpOSG_test.mat
-"""
+"""Generate variable-lag Burgers data with steep gradients."""
 
 from __future__ import annotations
 
@@ -44,14 +22,7 @@ def low_freq_signal(x: np.ndarray, rng: np.random.Generator, modes: int = 5) -> 
 
 
 def sharp_initial(x: np.ndarray, rng: np.random.Generator) -> np.ndarray:
-    """Generate a sharp-front periodic initial condition.
-
-    u0(x) = u_out + 0.5 * (u_in - u_out)
-            * (1 + tanh((w - |d(x, xc)|) / eps))
-            + 0.1 * s_low(x),
-
-    where d(x, xc) is the periodic distance on [0, 1].
-    """
+    """Generate a periodic initial condition with two steep transitions."""
     xc = rng.uniform(0.0, 1.0)
     w = rng.uniform(0.08, 0.25)
     eps = rng.uniform(0.005, 0.03)
@@ -68,14 +39,7 @@ def sharp_initial(x: np.ndarray, rng: np.random.Generator) -> np.ndarray:
 
 
 def rhs_burgers_periodic(u: np.ndarray, dx: float) -> np.ndarray:
-    """Semi-discrete RHS for inviscid Burgers with periodic boundary conditions.
-
-    Equation:
-        u_t + (u^2 / 2)_x = 0.
-
-    Flux:
-        Rusanov / local Lax-Friedrichs flux.
-    """
+    """Evaluate the periodic finite-volume Burgers right-hand side."""
     flux = 0.5 * u * u
 
     up = np.roll(u, -1)

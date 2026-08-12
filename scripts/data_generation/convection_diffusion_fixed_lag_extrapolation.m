@@ -16,12 +16,29 @@
 %   trajectories:  100 x 64 x 64 x 1 x 21 snapshots
 %
 clear; clc;
-rng(42);
+
+seed_text = getenv('FILM_OSG_FIXED_LAG_SEED');
+if isempty(seed_text)
+    fixed_lag_seed = 100042;
+else
+    fixed_lag_seed = str2double(seed_text);
+    assert(isfinite(fixed_lag_seed) && fixed_lag_seed == floor(fixed_lag_seed), ...
+        'FILM_OSG_FIXED_LAG_SEED must be an integer.');
+end
+rng(fixed_lag_seed);
 
 script_path = mfilename('fullpath');
 script_dir = fileparts(script_path);
 if isempty(script_dir)
     script_dir = pwd;
+end
+
+output_dir = getenv('FILM_OSG_OUTPUT_DIR');
+if isempty(output_dir)
+    output_dir = script_dir;
+end
+if ~exist(output_dir, 'dir')
+    mkdir(output_dir);
 end
 
 %% Parameters copied from the main advection--diffusion generator.
@@ -45,6 +62,8 @@ fprintf('  training lag interval: [%.4g, %.4g]\n', train_dt_min, train_dt_max);
 fprintf('  fixed diagnostic lags: %s\n', mat2str(fixed_lags));
 fprintf('  trajectories: %d, rollout steps per lag: %d\n', ...
     n_test_trajectories, test_steps);
+fprintf('  random seed: %d\n', fixed_lag_seed);
+fprintf('  output directory: %s\n', output_dir);
 
 %% Periodic grid and Fourier modes.
 dx = L / N;
@@ -95,8 +114,11 @@ for lag_idx = 1:numel(fixed_lags)
     end
 
     out_name = sprintf('test_data_fixed_dt_%s.mat', lag_to_token(fixed_dt));
-    out_path = fullfile(script_dir, out_name);
-    save(out_path, 'coordinates', 'dt', 'trajectories');
+    out_path = fullfile(output_dir, out_name);
+    assert(~exist(out_path, 'file'), ...
+        'Refusing to overwrite existing file: %s', out_path);
+    generator_seed = fixed_lag_seed;
+    save(out_path, 'coordinates', 'dt', 'trajectories', 'generator_seed', '-v7');
 
     assert_shape(size(coordinates), [N, N, 2], 'coordinates');
     assert_shape(size(dt), [n_test_trajectories, test_steps], 'dt');

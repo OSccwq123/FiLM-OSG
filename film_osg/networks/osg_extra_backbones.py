@@ -1,34 +1,17 @@
-"""
-OSG-compatible extra backbones for FiLM-OSG experiments on 2D regular-grid PDE data.
+"""Additional FiLM-OSG backbones for two-dimensional regular-grid data.
 
-This module is local FiLM-OSG experiment code, but it intentionally preserves
-the DUE-style network interface and imports the local DUE-derived base class.
+The implementations use the DUE-style network interface and local DUE-derived
+base class.
 The DUE project is available at https://github.com/AI4Equations/due and is
 distributed under the LGPL-2.1 license.
 
-The U-NO-style, Transolver-style, and MambaNO-style names describe
-OSG-adapted architecture variants inspired by the corresponding papers and
-public projects. This file does not vendor those upstream codebases. If the
-optional `mamba_ssm` package is installed, it is imported as an external
-dependency from state-spaces/mamba, which is distributed under Apache-2.0.
+U-NO-style, Transolver-style, and MambaNO-style denote OSG-adapted variants
+inspired by the corresponding papers and public projects. Inputs have shape
+`(B, H, W, C + 1)`, with the normalized lag in the last channel.
 
-It provides paired direct-lag and FiLM-conditioned variants:
-
-    osg_uno2d / osg_uno2d_with_film
-    osg_mambano2d / osg_mambano2d_with_film
-    osg_transolver2d / osg_transolver2d_with_film
-
-Design contract:
-    - input  x: (B, H, W, C + 1), last channel is normalized lag code delta
-    - output y: (B, H, W, C), using OSG outer-increment update
-              y = x0 + physical_dt * increment
-    - predict(x, dt, device) follows the same normalization / autoregressive
-      rollout style as the existing osg_fno2d implementation.
-
-Important implementation note:
-    The DUE-style get_activation("gelu") helper may return torch.nn.functional.gelu,
-    i.e. a function, not a torch.nn.Module. Therefore, whenever an activation
-    is inserted into torch.nn.Sequential, we wrap it with ActivationModule.
+The MambaNO-style variants require `mamba_ssm`, which is distributed under
+Apache-2.0. Functional activations are wrapped with `ActivationModule` when
+used in `torch.nn.Sequential`.
 """
 
 import torch
@@ -38,19 +21,14 @@ from .nn import nn as DUEBase
 from ..utils import get_activation
 
 
-# ---------------------------------------------------------------------
-# Optional Mamba dependency
-# ---------------------------------------------------------------------
-
 try:
     from mamba_ssm import Mamba as _OfficialMamba
-except Exception:
+except Exception as exc:
     _OfficialMamba = None
+    _MAMBA_IMPORT_ERROR = exc
+else:
+    _MAMBA_IMPORT_ERROR = None
 
-
-# ---------------------------------------------------------------------
-# Shared utilities
-# ---------------------------------------------------------------------
 
 class ActivationModule(torch.nn.Module):
     """Wrap a functional activation so it can be used inside nn.Sequential."""
@@ -191,15 +169,10 @@ class BaseOSG2D(DUEBase):
         return y.cpu().numpy()
 
 
-# ---------------------------------------------------------------------
-# 1. U-NO-style operator backbone
-# ---------------------------------------------------------------------
+# U-NO-style backbone
 
 class SpectralConv2dUno(torch.nn.Module):
-    """
-    2D UNO spectral integral block.
-    Allows output size different from input size.
-    """
+    """Two-dimensional spectral block with a selectable output grid."""
     def __init__(self, in_channels, out_channels, modes1, modes2):
         super().__init__()
         self.in_channels = int(in_channels)
@@ -284,11 +257,7 @@ class UnoOperatorBlock2d(torch.nn.Module):
 
 
 class osg_uno2d(BaseOSG2D):
-    """
-    Direct-lag OSG-U-NO.
-
-    Lag code is concatenated as a broadcast input channel.
-    """
+    """Direct-lag OSG-U-NO-style backbone."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
         super().__init__()
         self.register_buffer("vmin", torch.from_numpy(vmin).float())
@@ -345,12 +314,7 @@ class osg_uno2d(BaseOSG2D):
 
 
 class osg_uno2d_with_film(BaseOSG2D):
-    """
-    FiLM-OSG-U-NO.
-
-    Lag code drives layerwise FiLM; the state encoder does not receive lag as an
-    input channel.
-    """
+    """FiLM-OSG-U-NO-style backbone."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
         super().__init__()
         self.register_buffer("vmin", torch.from_numpy(vmin).float())
@@ -403,10 +367,7 @@ class osg_uno2d_with_film(BaseOSG2D):
         z = x0.permute(0, 3, 1, 2)
         h = self.lift(z)
 
-        # In the FiLM version, the block output is kept pre-activation.
-        # We apply FiLM first and then use one activation:
-        #     activation(gamma * block_output + beta).
-        # This avoids unintended double activation.
+        # Apply FiLM before the block activation.
         h0 = self.b0(h, H, W, nonlin=False)
         h0 = self.activation(apply_film_2d(h0, *film[0]))
 
@@ -429,54 +390,27 @@ class osg_uno2d_with_film(BaseOSG2D):
         return x0 + dt * incr
 
 
-# ---------------------------------------------------------------------
-# 2. MambaNO-style backbone
-# ---------------------------------------------------------------------
-
-class FallbackTokenMixer(torch.nn.Module):
-    """Fallback token mixer used when mamba_ssm is unavailable."""
-    def __init__(self, width):
-        super().__init__()
-        self.dw = torch.nn.Conv1d(width, width, kernel_size=5, padding=2, groups=width)
-        self.pw = torch.nn.Linear(width, width)
-
-    def forward(self, x):
-        # x: (B, N, C)
-        y = x.transpose(1, 2)
-        y = self.dw(y).transpose(1, 2)
-        return self.pw(y)
-
-
 class MambaTokenMixer(torch.nn.Module):
-    """Uses official mamba_ssm.Mamba when available; otherwise a fallback mixer."""
+    """Token mixer based on `mamba_ssm.Mamba`."""
     def __init__(self, width, d_state=16, d_conv=4, expand=2):
         super().__init__()
-        self.uses_official_mamba = _OfficialMamba is not None
-        if self.uses_official_mamba:
-            self.mixer = _OfficialMamba(
-                d_model=width,
-                d_state=d_state,
-                d_conv=d_conv,
-                expand=expand,
-            )
-        else:
-            self.mixer = FallbackTokenMixer(width)
+        if _OfficialMamba is None:
+            raise ImportError(
+                "The MambaNO-style models require the optional 'mamba_ssm' package."
+            ) from _MAMBA_IMPORT_ERROR
+        self.mixer = _OfficialMamba(
+            d_model=width,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+        )
 
     def forward(self, x):
         return self.mixer(x)
 
 
 class MambaNOBlock2d(torch.nn.Module):
-    """
-    MambaNO-style block with:
-      - global row-major scan
-      - global column-major scan
-      - local depthwise 2D convolution branch
-      - MLP channel mixing
-
-    If film=(gamma,beta) is provided, FiLM is applied to normalized features
-    before the mixer / MLP sublayers, not after the whole residual block.
-    """
+    """Row, column, and local mixing followed by a pointwise MLP."""
     def __init__(self, width, activation, d_state=16, d_conv=4, expand=2):
         super().__init__()
         self.width = int(width)
@@ -513,17 +447,14 @@ class MambaNOBlock2d(torch.nn.Module):
         self.scale = torch.nn.Parameter(torch.ones(3))
 
     def forward(self, x, H, W, film=None):
-        # x: (B, H*W, C)
         B, N, C = x.shape
         assert N == H * W
 
-        # Row-major branch.
         row_in = self.norm_row(x)
         if film is not None:
             row_in = apply_film_tokens(row_in, *film)
         row = self.row_mixer(row_in)
 
-        # Column-major branch.
         x_img = x.reshape(B, H, W, C)
         col_tokens = x_img.transpose(1, 2).reshape(B, W * H, C)
 
@@ -534,7 +465,6 @@ class MambaNOBlock2d(torch.nn.Module):
         col = self.col_mixer(col_in)
         col = col.reshape(B, W, H, C).transpose(1, 2).reshape(B, H * W, C)
 
-        # Local branch.
         local_in = self.norm_local(x)
         if film is not None:
             local_in = apply_film_tokens(local_in, *film)
@@ -542,11 +472,9 @@ class MambaNOBlock2d(torch.nn.Module):
         local = local_in.reshape(B, H, W, C).permute(0, 3, 1, 2)
         local = self.local(local).permute(0, 2, 3, 1).reshape(B, H * W, C)
 
-        # Residual mixing.
         weights = torch.softmax(self.scale, dim=0)
         x = x + weights[0] * row + weights[1] * col + weights[2] * local
 
-        # MLP branch.
         mlp_in = self.norm_mlp(x)
         if film is not None:
             mlp_in = apply_film_tokens(mlp_in, *film)
@@ -675,17 +603,10 @@ class osg_mambano2d_with_film(BaseOSG2D):
         return x0 + dt * incr
 
 
-# ---------------------------------------------------------------------
-# 3. Transolver-style backbone with Physics Attention
-# ---------------------------------------------------------------------
+# Transolver-style backbone
 
 class PhysicsAttention2d(torch.nn.Module):
-    """
-    Transolver-style physics attention:
-      (1) slice tokens from point/node tokens,
-      (2) self-attend among slice tokens,
-      (3) deslice back to point/node tokens.
-    """
+    """Transolver-style attention through learned slice tokens."""
     def __init__(self, dim, heads=4, dim_head=None, dropout=0.0, slice_num=32):
         super().__init__()
         self.dim = int(dim)
@@ -719,7 +640,6 @@ class PhysicsAttention2d(torch.nn.Module):
         )
 
     def forward(self, x):
-        # x: (B, N, C)
         B, N, C = x.shape
 
         fx_mid = self.in_project_fx(x).reshape(B, N, self.heads, self.dim_head)
@@ -728,7 +648,6 @@ class PhysicsAttention2d(torch.nn.Module):
         x_mid = self.in_project_x(x).reshape(B, N, self.heads, self.dim_head)
         x_mid = x_mid.permute(0, 2, 1, 3).contiguous()  # B,H,N,D
 
-        # Slice
         slice_logits = self.in_project_slice(x_mid) / self.temperature
         slice_weights = torch.softmax(slice_logits, dim=-1)  # B,H,N,G
         slice_norm = slice_weights.sum(dim=2)  # B,H,G
@@ -736,7 +655,6 @@ class PhysicsAttention2d(torch.nn.Module):
         slice_token = torch.einsum("bhnd,bhng->bhgd", fx_mid, slice_weights)
         slice_token = slice_token / (slice_norm[:, :, :, None] + 1e-5)
 
-        # Attention among slice tokens
         q = self.to_q(slice_token)
         k = self.to_k(slice_token)
         v = self.to_v(slice_token)
@@ -747,7 +665,6 @@ class PhysicsAttention2d(torch.nn.Module):
 
         out_slice = torch.matmul(attn, v)  # B,H,G,D
 
-        # Deslice
         out = torch.einsum("bhgd,bhng->bhnd", out_slice, slice_weights)
         out = out.permute(0, 2, 1, 3).reshape(B, N, self.heads * self.dim_head)
 
@@ -755,12 +672,7 @@ class PhysicsAttention2d(torch.nn.Module):
 
 
 class TransolverBlock(torch.nn.Module):
-    """
-    Transolver-style block.
-
-    If film=(gamma,beta) is provided, FiLM is applied to the normalized hidden
-    state before PhysicsAttention and before the MLP sublayer.
-    """
+    """Transolver-style attention and MLP block with optional FiLM."""
     def __init__(self, hidden_dim, heads, dropout, activation, mlp_ratio=4, slice_num=32):
         super().__init__()
 
@@ -796,10 +708,7 @@ class TransolverBlock(torch.nn.Module):
 
 
 class osg_transolver2d(BaseOSG2D):
-    """
-    Direct-lag OSG-Transolver-style backbone.
-    Uses physics attention over regular-grid tokens.
-    """
+    """Direct-lag OSG-Transolver-style backbone."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
         super().__init__()
         self.register_buffer("vmin", torch.from_numpy(vmin).float())

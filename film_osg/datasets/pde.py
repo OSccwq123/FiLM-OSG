@@ -1,9 +1,8 @@
-"""PDE dataset loaders for FiLM-OSG reproducibility experiments.
+"""Dataset loaders for the PDE experiments.
 
 Portions of this module are adapted from the DUE project:
 https://github.com/AI4Equations/due
-DUE is distributed under the LGPL-2.1 license. Local changes here keep the
-original dataset API while adding OSG/FiLM-OSG reproducibility support.
+DUE is distributed under the LGPL-2.1 license.
 """
 
 import numpy as np
@@ -11,20 +10,7 @@ from scipy.io import loadmat
 
 
 class pde_dataset_osg():
-    """
-    A class representing a partial differential equation (PDE) dataset.
-
-    Attributes:
-        problem_type (str): The type of the PDE problem, one of {"1d_regular", "2d_regular", "1d_irregular", "2d_irregular"}.
-        nbursts (int): The number of short bursts sampled from each trajectory.
-        multiscale (bool): Indicates whether the dataset exhibits multiscale property in time.
-        dtype (str): The data type of the dataset.
-
-    Methods:
-        load(file_path_train, file_path_test): Loads the PDE dataset from the given file paths.
-        normalize(data, dt, coords): Normalizes the PDE dataset.
-
-    """
+    """Load trajectory data and sample one-step transitions for OSG training."""
     def __init__(self, config):
         self.problem_type = config["problem_type"]
         self.nbursts = config["nbursts"]
@@ -32,16 +18,7 @@ class pde_dataset_osg():
         self.dtype = config["dtype"]
 
     def load(self, file_path_train, file_path_test):
-        """
-        Loads the PDE dataset from the given file paths.
-
-        Args:
-            file_path_train (str): The file path of the training dataset.
-            file_path_test (str or None): The file path of the test dataset.
-
-        Returns:
-            tuple: A tuple containing the loaded dataset and other related information.
-        """
+        """Load and normalize the training data and optional test data."""
         try:
             data = loadmat(file_path_train)
         except NotImplementedError:
@@ -139,17 +116,7 @@ class pde_dataset_osg():
             return target_X.astype(self.dtype), target_Y.astype(self.dtype), coords.astype(self.dtype), data.astype(self.dtype), dt.astype(self.dtype), vmin.astype(self.dtype), vmax.astype(self.dtype), tmin.astype(self.dtype), tmax.astype(self.dtype), cmin.astype(self.dtype), cmax.astype(self.dtype)
 
     def normalize(self, data, dt, coords):
-        """
-        Normalizes the PDE dataset.
-
-        Args:
-            data (ndarray): The data array of the dataset.
-            dt (ndarray): The time step array of the dataset.
-            coords (ndarray): The coordinates array of the dataset.
-
-        Returns:
-            tuple: A tuple containing the normalized dataset and other related information.
-        """
+        """Scale states, lags, and coordinates to the interval [-1, 1]."""
         axes = tuple(np.delete(np.arange(len(data.shape)), [-2]))
         vmax = np.max(data, axis=axes, keepdims=True)
         vmin = np.min(data, axis=axes, keepdims=True)

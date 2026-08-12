@@ -36,15 +36,7 @@ def parse_str_list(text):
 
 def safe_torch_load(model_path, device):
     import torch
-
-    from film_osg.compat import install_due_pickle_aliases
-
-    compat_source = install_due_pickle_aliases()
-    print("pickle_compat_source =", compat_source, flush=True)
-    try:
-        return torch.load(model_path, map_location=device, weights_only=False)
-    except TypeError:
-        return torch.load(model_path, map_location=device)
+    return torch.load(model_path, map_location=device, weights_only=False)
 
 
 def model_path_for(model_name, seed, tag, root="."):
@@ -240,30 +232,6 @@ def summarize(seedwise_rows):
     return summaries
 
 
-def run_check(args, test_path, models, seeds, horizons):
-    print("Paper-matched partition definition check", flush=True)
-    print("partition_seed =", args.partition_seed, flush=True)
-    for terminal_time in horizons:
-        partitions = make_partitions(
-            terminal_time,
-            num_random=args.num_random,
-            partition_seed=args.partition_seed,
-        )
-        lengths = {name: len(steps) for name, steps in partitions.items()}
-        print(f"T={terminal_time}: {len(partitions)} partitions; steps={lengths}", flush=True)
-    print("test_data_exists =", test_path.exists(), str(test_path), flush=True)
-    missing = []
-    for model_name in models:
-        for seed in seeds:
-            path = model_path_for(model_name, seed, args.tag, root=args.model_root)
-            exists = os.path.exists(path)
-            print(f"model_exists={exists}: {path}", flush=True)
-            if not exists:
-                missing.append(path)
-    if (not test_path.exists() or missing) and not args.skip_missing:
-        raise FileNotFoundError("Missing data or model paths; use --skip-missing for interface checks")
-
-
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -282,18 +250,12 @@ def main():
     parser.add_argument("--save-dir", default="./eval_outputs_ns_partition_robustness_paper")
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--device", default=None)
-    parser.add_argument("--skip-missing", action="store_true")
-    parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
 
     models = parse_str_list(args.models)
     seeds = parse_int_list(args.seeds)
     horizons = parse_int_list(args.horizons)
     test_path = Path(args.data_dir) / TEST_FILE
-
-    if args.check_only:
-        run_check(args, test_path, models, seeds, horizons)
-        return
 
     import torch
     from scipy.io import loadmat
@@ -310,15 +272,10 @@ def main():
 
     seedwise_rows = []
     partition_rows = []
-    missing = []
     for model_name in models:
         for seed in seeds:
             path = model_path_for(model_name, seed, args.tag, root=args.model_root)
             if not os.path.exists(path):
-                if args.skip_missing:
-                    print("[SKIP] Missing model:", path, flush=True)
-                    missing.append({"model": model_name, "seed": seed, "path": path})
-                    continue
                 raise FileNotFoundError(f"Missing model: {path}")
 
             model = safe_torch_load(path, args.device)
@@ -389,7 +346,6 @@ def main():
                 "partition_seed": args.partition_seed,
                 "models": models,
                 "seeds": seeds,
-                "missing": missing,
             },
             handle,
             indent=2,

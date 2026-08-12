@@ -35,19 +35,7 @@ def parse_str_list(text):
 
 
 def get_model_path(variant_name, seed, root=".", tag=""):
-    """
-    Path convention for NS ablation.
-
-    no-SG variants:
-        direct_nosg -> runs_ns_direct_nosg_seed{s}
-        film_nosg   -> runs_ns_film_nosg_seed{s}
-
-    SG variants reuse the main NS FNO runs:
-        direct_sg -> runs_ns_fno_seed{s}
-        film_sg   -> runs_ns_fno_film_seed{s}
-
-    Fallbacks are included in case direct_sg / film_sg were trained separately.
-    """
+    """Resolve the checkpoint for a Navier--Stokes ablation."""
     suffix = f"_{tag}" if tag else ""
     candidates = {
         "direct_nosg": [
@@ -159,11 +147,7 @@ def evaluate_one_model(
     train_data = loadmat(train_path)
     test_data = loadmat(test_path)
 
-    from film_osg.compat import install_due_pickle_aliases
-
-    compat_source = install_due_pickle_aliases()
-    print("pickle_compat_source =", compat_source, flush=True)
-    model = torch.load(model_path, map_location=device)
+    model = torch.load(model_path, map_location=device, weights_only=False)
     print("loaded_model_class =", f"{type(model).__module__}.{type(model).__name__}", flush=True)
     model.eval()
 
@@ -234,19 +218,12 @@ def evaluate_variant_family(
     save_mat=True,
     save_dir="./eval_outputs_ns_ablation_seed012",
     stable_final_threshold=1.0,
-    skip_missing=False,
 ):
     metrics_list = []
     seedwise_rows = []
 
     for seed in seeds:
-        try:
-            model_path = get_model_path(variant_name, seed, root=model_root, tag=tag)
-        except FileNotFoundError as exc:
-            if skip_missing:
-                print("[SKIP]", exc, flush=True)
-                continue
-            raise
+        model_path = get_model_path(variant_name, seed, root=model_root, tag=tag)
         metrics = evaluate_one_model(
             model_path=model_path,
             variant_name=variant_name,
@@ -263,10 +240,6 @@ def evaluate_variant_family(
         row = {"variant": variant_name, "seed": seed}
         row.update(metrics)
         seedwise_rows.append(row)
-
-    if not metrics_list:
-        print(f"No completed evaluations for {variant_name}.", flush=True)
-        return [], {}, []
 
     summary = summarize_metrics(
         metrics_list,
@@ -411,9 +384,6 @@ def main():
         action="store_true",
         help="Do not save prediction .mat files.",
     )
-    parser.add_argument("--skip-missing", action="store_true")
-    parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--stable-final-threshold",
         type=float,
@@ -447,21 +417,6 @@ def main():
     print("Save mat:", save_mat, flush=True)
     print("=" * 80, flush=True)
 
-    if args.check_only or args.dry_run:
-        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
-        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
-        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
-        for variant in variants:
-            for seed in seeds:
-                try:
-                    path = get_model_path(variant, seed, root=args.model_root, tag=args.tag)
-                    print(f"Model path exists=True: {path}", flush=True)
-                except FileNotFoundError as exc:
-                    print("[MISSING]", exc, flush=True)
-                    if not args.skip_missing:
-                        raise
-        return
-
     all_metrics = {}
     all_summaries = {}
     all_seedwise_rows = []
@@ -479,7 +434,6 @@ def main():
             save_mat=save_mat,
             save_dir=args.save_dir,
             stable_final_threshold=args.stable_final_threshold,
-            skip_missing=args.skip_missing,
         )
         all_metrics[variant] = metrics_list
         all_summaries[variant] = summary

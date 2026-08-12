@@ -1,33 +1,8 @@
-FiLM-OSG reproducibility code
+FiLM-OSG
+========
 
-This repository contains reproducibility code for the FiLM-OSG manuscript.
-
-DUE attribution
----------------
-
-Portions of the local `film_osg` package are adapted from DUE:
-
-    AI4Equations/DUE
-    https://github.com/AI4Equations/due
-    License: LGPL-2.1
-
-The local copies are included to make the FiLM-OSG reproducibility scripts
-runnable without requiring the external `due` package on the primary execution
-path, while preserving compatibility with historical DUE-style APIs and model
-files.
-
-Repository license status
--------------------------
-
-The final license for this FiLM-OSG reproducibility repository is pending
-confirmation by the authors and advisor. This NOTICE records provenance and
-attribution for review; it is not a substitute for a top-level LICENSE file.
-Before public release, confirm the final repository license and any additional
-notice or source-availability requirements for files adapted from the
-LGPL-2.1-licensed AI4Equations/DUE repository. See `THIRD_PARTY_LICENSES/` for
-placeholder notes reserved for this review.
-
-Local modules adapted from DUE include:
+The following modules contain code adapted from
+AI4Equations/DUE (LGPL-2.1):
 
     film_osg/datasets/pde.py
     film_osg/models/pde.py
@@ -36,44 +11,16 @@ Local modules adapted from DUE include:
     film_osg/networks/fno.py
     film_osg/utils.py
 
-The extra-backbone module:
+Upstream: https://github.com/AI4Equations/due
+License text: `THIRD_PARTY_LICENSES/DUE-LGPL-2.1.txt`
 
-    film_osg/networks/osg_extra_backbones.py
+The FNO implementation also follows the neuraloperator reference
+implementation (MIT):
 
-is local FiLM-OSG experiment code, but it intentionally follows the DUE-style
-network interface so those variants can be trained and evaluated through the
-same OSG-compatible wrappers.
+    https://github.com/neuraloperator/neuraloperator
 
-FNO reference
--------------
+License text: `THIRD_PARTY_LICENSES/NEURALOPERATOR-MIT.txt`
 
-The FNO implementation also follows the public neuraloperator Fourier neural
-operator reference:
-
-    https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py
-
-The neuraloperator project is distributed under the MIT license. See
-`THIRD_PARTY_LICENSES/NEURALOPERATOR-MIT.txt` for release-review notes.
-
-Architecture references
------------------------
-
-The U-NO-style, Transolver-style, and MambaNO-style modules are local
-OSG-adapted implementations intended for portability diagnostics. The names
-describe architecture inspirations; the repository does not vendor the upstream
-U-NO, Transolver, or MambaNO codebases.
-
-The optional `mamba_ssm` import, when installed by a user, is an external
-dependency from state-spaces/mamba, which is distributed under Apache-2.0. See
-`THIRD_PARTY_LICENSES/MAMBA-APACHE-2.0.txt` for release-review notes.
-
-See `THIRD_PARTY_LICENSES/ARCHITECTURE_REFERENCES.md` for citation and
-license-check placeholders for U-NO-style, Transolver-style, and MambaNO-style
-references before public release.
-
-Scope of local changes
-----------------------
-
-These attributions document code provenance only. The reproducibility cleanup
-does not change the manuscript protocol, model logic, hyperparameters, seed
-settings, metric formulas, or reported experimental conclusions.
+The optional `mamba_ssm` dependency is distributed under Apache-2.0 and is not
+included in this repository. Its license text is provided in
+`THIRD_PARTY_LICENSES/MAMBA-APACHE-2.0.txt`.

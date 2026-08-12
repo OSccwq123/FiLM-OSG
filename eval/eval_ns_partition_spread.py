@@ -31,14 +31,7 @@ def parse_str_list(text):
 
 
 def safe_torch_load(model_path, device):
-    from film_osg.compat import install_due_pickle_aliases
-
-    compat_source = install_due_pickle_aliases()
-    print("pickle_compat_source =", compat_source, flush=True)
-    try:
-        return torch.load(model_path, map_location=device, weights_only=False)
-    except TypeError:
-        return torch.load(model_path, map_location=device)
+    return torch.load(model_path, map_location=device, weights_only=False)
 
 
 def model_path_for(model_name, seed, tag, root="."):
@@ -144,8 +137,6 @@ def main():
     parser.add_argument("--partitions", type=str, default="1,2,4,8")
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--skip-missing", action="store_true")
-    parser.add_argument("--check-only", action="store_true")
     args = parser.parse_args()
 
     models = parse_str_list(args.models)
@@ -160,30 +151,13 @@ def main():
     print("Device:", args.device, flush=True)
     print("Test data:", test_path, flush=True)
 
-    if args.check_only:
-        print("Test data exists:", test_path.exists(), flush=True)
-        for model_name in models:
-            for seed in seeds:
-                path = model_path_for(model_name, seed, args.tag, root=args.model_root)
-                exists = os.path.exists(path)
-                print(f"Model path exists={exists}: {path}", flush=True)
-                if not exists and not args.skip_missing:
-                    raise FileNotFoundError(f"Missing model: {path}")
-        return
-
     test_data = loadmat(test_path)
     rows = []
-    missing = []
     for model_name in models:
         for seed in seeds:
             path = model_path_for(model_name, seed, args.tag, root=args.model_root)
             if not os.path.exists(path):
-                msg = f"Missing model: {path}"
-                if args.skip_missing:
-                    print("[SKIP]", msg, flush=True)
-                    missing.append({"model": model_name, "seed": seed, "path": path})
-                    continue
-                raise FileNotFoundError(msg)
+                raise FileNotFoundError(f"Missing model: {path}")
             metrics = evaluate_one(model_name, seed, args.tag, args.model_root, test_data, args.device, partitions, args.max_samples)
             row = {"model": model_name, "seed": seed, "tag": args.tag}
             row.update(metrics)
@@ -211,7 +185,7 @@ def main():
             }
 
     with open(summary_path, "w", encoding="utf-8") as f:
-        json.dump({"summary": summary, "missing": missing, "partitions": partitions}, f, indent=2)
+        json.dump({"summary": summary, "partitions": partitions}, f, indent=2)
 
     print("Saved:", seedwise_path, flush=True)
     print("Saved:", summary_path, flush=True)

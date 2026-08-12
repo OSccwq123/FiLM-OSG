@@ -123,6 +123,8 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
         gl_osg_fno2d_with_film,
         osg_fno2d,
         osg_fno2d_with_film,
+        vt_fno2d,
+        vt_fno2d_with_film,
     )
 
     print("network_import_source = film_osg", flush=True)
@@ -149,7 +151,25 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
         return gl_osg_fno2d(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
     if model_name == "gl_fno_film":
         return gl_osg_fno2d_with_film(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
-    raise ValueError("model_name must be one of fno, fno_film, gl_fno, gl_fno_film")
+    if model_name == "vt_fno":
+        return vt_fno2d(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+    if model_name == "vt_fno_film":
+        return vt_fno2d_with_film(
+            vmin=vmin,
+            vmax=vmax,
+            tmin=tmin,
+            tmax=tmax,
+            config=config,
+            multiscale=config["multiscale"],
+        )
+    raise ValueError("model_name must be one of fno, fno_film, gl_fno, gl_fno_film, vt_fno, vt_fno_film")
 
 
 def train_one(
@@ -213,6 +233,14 @@ def train_one(
         gl_local_scale=gl_local_scale,
         gl_local_film_mode=gl_local_film_mode,
     )
+
+    if model_name in {"vt_fno", "vt_fno_film"}:
+        # Direct-time external baselines: no OSG semigroup pairing, HF regularizer, or mean projection.
+        config["sg_pairing"] = 0
+        config["sg_weight"] = 0.0
+        config["hf_weight"] = 0.0
+        config["hf_sg_weight"] = 0.0
+        config["conserve_mean"] = False
 
     if dry_run:
         print("Navier-Stokes FNO training dry run", flush=True)
@@ -300,7 +328,7 @@ def train_one(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, required=True, choices=["fno", "fno_film", "gl_fno", "gl_fno_film"])
+    parser.add_argument("--model", type=str, required=True, choices=["fno", "fno_film", "gl_fno", "gl_fno_film", "vt_fno", "vt_fno_film"])
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=20)

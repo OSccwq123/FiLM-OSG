@@ -18,6 +18,14 @@ if isempty(script_dir)
     script_dir = pwd;
 end
 
+output_dir = getenv('FILM_OSG_OUTPUT_DIR');
+if isempty(output_dir)
+    output_dir = script_dir;
+end
+if ~exist(output_dir, 'dir')
+    mkdir(output_dir);
+end
+
 %% Parameters
 L_fine = 4096;
 L_coarse = 64;
@@ -63,7 +71,7 @@ for m = 1:N_train
     end
 
     u0_coarse = initial_condition(x_coarse, a0_train(m), an_train(m, :), bn_train(m, :));
-    u0_fine = interp1(x_coarse, u0_coarse, x_fine, 'spline');
+    u0_fine = initial_condition(x_fine, a0_train(m), an_train(m, :), bn_train(m, :));
 
     time_steps = dt_min + (dt_max - dt_min) * rand(T_train - 1, 1);
     dt_train(m, :) = time_steps';
@@ -91,7 +99,10 @@ for m = 1:N_train
 end
 
 dt = dt_train;
-save(fullfile(script_dir, 'BurgersOSG_train.mat'), ...
+train_output = fullfile(output_dir, 'BurgersOSG_train.mat');
+assert(~exist(train_output, 'file'), ...
+    'Refusing to overwrite existing file: %s', train_output);
+save(train_output, ...
     'coordinates', 'dt', 'trajectories', '-v7');
 assert_shape(size(coordinates), [L_coarse, 1], 'train coordinates');
 assert_shape(size(dt), [N_train, T_train - 1], 'train dt');
@@ -114,16 +125,17 @@ for m = 1:N_test
 
     if m == N_test
         u0_coarse = -sin(x_coarse);
+        u0_fine = -sin(x_fine);
         total_time = 2.0;
         time_steps = (total_time / (T_test - 1)) * ones(T_test - 1, 1);
         fprintf('  Test case %d: shock wave initial condition -sin(x)\n', m);
     else
         u0_coarse = initial_condition(x_coarse, a0_test(m), an_test(m, :), bn_test(m, :));
+        u0_fine = initial_condition(x_fine, a0_test(m), an_test(m, :), bn_test(m, :));
         time_steps = dt_min + (dt_max - dt_min) * rand(T_test - 1, 1);
     end
 
     dt_test(m, :) = time_steps';
-    u0_fine = interp1(x_coarse, u0_coarse, x_fine, 'spline');
     t_points = [0; cumsum(time_steps)];
 
     u_current = u0_fine;
@@ -148,7 +160,10 @@ for m = 1:N_test
 end
 
 dt = dt_test;
-save(fullfile(script_dir, 'BurgersOSG_test.mat'), ...
+test_output = fullfile(output_dir, 'BurgersOSG_test.mat');
+assert(~exist(test_output, 'file'), ...
+    'Refusing to overwrite existing file: %s', test_output);
+save(test_output, ...
     'coordinates', 'dt', 'trajectories', '-v7');
 assert_shape(size(coordinates), [L_coarse, 1], 'test coordinates');
 assert_shape(size(dt), [N_test, T_test - 1], 'test dt');
@@ -201,5 +216,7 @@ function u_next = RK4_LF_step(u, dt, dx)
     k3 = burgers_rhs_LF(u + 0.5 * dt * k2, dx);
     k4 = burgers_rhs_LF(u + dt * k3, dx);
     u_next = u + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4);
-    u_next = max(min(u_next, 10), -10);
+    assert(all(isfinite(u_next)), 'Non-finite value produced by Burgers solver.');
+    assert(max(abs(u_next)) < 10, ...
+        'Burgers solver exceeded the safety bound |u| < 10.');
 end

@@ -40,13 +40,11 @@ COLORS = {
 }
 
 BURGERS_CAPTION = (
-    "Representative sharp-front Burgers rollout. The benchmark uses variable "
-    "query lags and nonsmooth initial profiles to stress local front resolution. "
+    "Representative Burgers rollout with steep gradients. The benchmark uses "
+    "variable time lags and nonsmooth initial profiles. "
     "The figure compares the OSG baseline, FiLM-OSG with mean-zero projection, "
-    "the external variable-time FNO baseline, and the targeted GL-FiLM extension. "
-    "The zoom and absolute-error panels focus on the steep-front region, matching "
-    "the motivation from global-local conservation-law operators while keeping "
-    "GL-FiLM scoped as a sharp-front extension rather than the primary model."
+    "the variable-time FNO baseline, and GL-FiLM. The zoom and absolute-error "
+    "panels show the region with the steepest gradient."
 )
 
 
@@ -189,7 +187,7 @@ def burgers_flow_figure(args):
     ax_err.set_ylabel("|prediction - truth|")
     style(ax_err)
 
-    fig.suptitle("Sharp-front Burgers: targeted global-local correction", fontsize=13)
+    fig.suptitle("Burgers equation: global--local comparison", fontsize=13)
     fig.tight_layout(rect=[0, 0.02, 1, 0.94])
     args.out_dir.mkdir(parents=True, exist_ok=True)
     pdf = args.out_dir / "fig_burgers_sharp_flow_case.pdf"

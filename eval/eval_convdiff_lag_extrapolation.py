@@ -182,10 +182,7 @@ def main():
     parser.add_argument("--save-dir", type=str, default=DEFAULT_SAVE_DIR)
     parser.add_argument("--eval-steps", type=int, default=None)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--skip-missing", action="store_true")
     parser.add_argument("--save-mat", action="store_true")
-    parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
 
@@ -211,22 +208,6 @@ def main():
     print("Save dir:", args.save_dir, flush=True)
     print("=" * 80, flush=True)
 
-    if args.check_only or args.dry_run:
-        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
-        print("Train data exists:", train_path.exists(), str(train_path), flush=True)
-        if not test_files:
-            print(f"No fixed-lag test files matched {data_root / DEFAULT_TEST_GLOB}", flush=True)
-        for test_file in test_files:
-            print("Test file exists:", test_file.exists(), str(test_file), flush=True)
-        for model_name in models:
-            for seed in seeds:
-                path = model_path_for(model_name, seed, args.tag, root=args.model_root)
-                exists = os.path.exists(path)
-                print(f"Model path exists={exists}: {path}", flush=True)
-                if not exists and not args.skip_missing:
-                    raise FileNotFoundError(f"Missing model: {path}")
-        return
-
     if not test_files:
         raise FileNotFoundError(f"No fixed-lag test files matched {data_root / DEFAULT_TEST_GLOB}")
 
@@ -236,8 +217,6 @@ def main():
     all_rows = []
     summary_by_test = {}
     paired_by_test = {}
-    missing = []
-
     for test_file in test_files:
         test_data = loadmat(test_file)
         lag_label = lag_label_from_dt(test_data["dt"])
@@ -252,19 +231,7 @@ def main():
             for seed in seeds:
                 path = model_path_for(model_name, seed, args.tag, root=args.model_root)
                 if not os.path.exists(path):
-                    msg = f"Missing model: {path}"
-                    if args.skip_missing:
-                        print("[SKIP]", msg, flush=True)
-                        missing.append(
-                            {
-                                "test_file": str(test_file),
-                                "model": model_name,
-                                "seed": seed,
-                                "path": path,
-                            }
-                        )
-                        continue
-                    raise FileNotFoundError(msg)
+                    raise FileNotFoundError(f"Missing model: {path}")
 
                 metrics = evaluate_one_model_on_test_file(
                     model_name=model_name,
@@ -352,7 +319,6 @@ def main():
                 "eval_steps": args.eval_steps,
                 "summary_by_test": summary_by_test,
                 "paired_by_test": paired_by_test,
-                "missing": missing,
             },
             f,
             indent=2,

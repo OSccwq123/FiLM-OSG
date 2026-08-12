@@ -20,13 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def safe_torch_load(path: Path, device: torch.device):
-    from film_osg.compat import install_due_pickle_aliases
-
-    install_due_pickle_aliases()
-    try:
-        return torch.load(path, map_location=device, weights_only=False)
-    except TypeError:
-        return torch.load(path, map_location=device)
+    return torch.load(path, map_location=device, weights_only=False)
 
 
 def physical_dt(model, delta: torch.Tensor) -> torch.Tensor:

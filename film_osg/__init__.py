@@ -1,2 +1,1 @@
-"""Local FiLM-OSG compatibility package."""
-
+"""FiLM-OSG models and experiment utilities."""

@@ -29,6 +29,7 @@ DEFAULT_MODELS = [
 
 DEFAULT_PAIRS = [
     ("fno", "fno_film"),
+    ("vt_fno", "vt_fno_film"),
 ]
 
 DEFAULT_SEEDS = [0, 1, 2, 3, 4]
@@ -50,15 +51,7 @@ def parse_str_list(text):
 
 
 def safe_torch_load(model_path, device):
-    from film_osg.compat import install_due_pickle_aliases
-
-    compat_source = install_due_pickle_aliases()
-    print("pickle_compat_source =", compat_source, flush=True)
-
-    try:
-        return torch.load(model_path, map_location=device, weights_only=False)
-    except TypeError:
-        return torch.load(model_path, map_location=device)
+    return torch.load(model_path, map_location=device, weights_only=False)
 
 
 def model_path_for(model_name, seed, tag, root="."):
@@ -268,6 +261,8 @@ def paired_comparison(seedwise_rows, pairs, metric_keys):
             set(seed for (model, seed) in by_key.keys() if model == direct)
             & set(seed for (model, seed) in by_key.keys() if model == film)
         )
+        if not seeds:
+            continue
 
         for seed in seeds:
             d = by_key[(direct, seed)]
@@ -344,10 +339,7 @@ def main():
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--eval-steps", type=int, default=None)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--skip-missing", action="store_true")
     parser.add_argument("--save-mat", action="store_true")
-    parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
 
@@ -375,19 +367,6 @@ def main():
     print("Save dir:", args.save_dir, flush=True)
     print("=" * 80, flush=True)
 
-    if args.check_only or args.dry_run:
-        print("Check-only mode: no .mat files or model weights will be loaded.", flush=True)
-        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
-        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
-        for model_name in models:
-            for seed in seeds:
-                path = model_path_for(model_name, seed, args.tag, root=args.model_root)
-                exists = os.path.exists(path)
-                print(f"Model path exists={exists}: {path}", flush=True)
-                if not exists and not args.skip_missing:
-                    raise FileNotFoundError(f"Missing model: {path}")
-        return
-
     os.makedirs(args.save_dir, exist_ok=True)
 
     train_data = loadmat(train_path)
@@ -398,19 +377,12 @@ def main():
     print("Test dt shape:", test_data["dt"].shape, flush=True)
 
     seedwise_rows = []
-    missing = []
-
     for model_name in models:
         for seed in seeds:
             path = model_path_for(model_name, seed, args.tag, root=args.model_root)
 
             if not os.path.exists(path):
-                msg = f"Missing model: {path}"
-                if args.skip_missing:
-                    print("[SKIP]", msg, flush=True)
-                    missing.append({"model": model_name, "seed": seed, "path": path})
-                    continue
-                raise FileNotFoundError(msg)
+                raise FileNotFoundError(f"Missing model: {path}")
 
             metrics = evaluate_one_model(
                 model_name=model_name,
@@ -461,7 +433,6 @@ def main():
     paired_csv = os.path.join(args.save_dir, "ns_fno_paired_seedwise.csv")
     paired_summary_csv = os.path.join(args.save_dir, "ns_fno_paired_summary.csv")
     paired_json = os.path.join(args.save_dir, "ns_fno_paired.json")
-    missing_json = os.path.join(args.save_dir, "ns_fno_missing.json")
 
     write_csv(seedwise_csv, seedwise_rows)
     write_csv(summary_csv, flatten_summary_rows(summary_by_model, metric_keys))
@@ -491,10 +462,6 @@ def main():
             f,
             indent=2,
         )
-
-    if missing:
-        with open(missing_json, "w", encoding="utf-8") as f:
-            json.dump(missing, f, indent=2)
 
     print("\nSummary by model:", flush=True)
     for model_name, item in summary_by_model.items():
@@ -529,8 +496,6 @@ def main():
     print(" ", paired_csv, flush=True)
     print(" ", paired_summary_csv, flush=True)
     print(" ", paired_json, flush=True)
-    if missing:
-        print(" ", missing_json, flush=True)
 
     print("=" * 80, flush=True)
 

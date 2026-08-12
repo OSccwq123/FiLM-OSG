@@ -64,17 +64,7 @@ def set_seed(seed: int):
 
 
 def make_config(model_name: str, save_path: str, seed: int, batch_size: int):
-    """
-    NS profiling configuration aligned with the current training setup.
-
-    FNO uses the current NS-FNO setting:
-        modes1=modes2=12, depth=4, width=20, loss=rel_l2.
-
-    Extra backbones use the current OSG-compatible extra-backbone setting:
-        modes1=modes2=8 for U-NO-style,
-        n_head=2 and slice_num=32 for Transolver-style,
-        Mamba parameters as in train_ns_extra_backbones.py.
-    """
+    """Return the Navier--Stokes configuration used for profiling."""
     if model_name in ["fno", "fno_film"]:
         modes1 = 12
         modes2 = 12
@@ -111,7 +101,6 @@ def make_config(model_name: str, save_path: str, seed: int, batch_size: int):
         "depth": 4,
         "width": 20,
 
-        # Extra-backbone keys. Harmless for FNO.
         "uno_norm": False,
 
         "n_head": 2,
@@ -255,13 +244,7 @@ def encode_dt(dt, tmin, tmax, multiscale=False):
 
 
 def make_sg_batch(xb, tmin, tmax, multiscale=False):
-    """
-    Build a lightweight auxiliary semigroup batch.
-
-    xb is expected to have shape (B,H,W,C+1), where the last channel is the
-    normalized lag code. We use the state part from xb and construct two lags
-    from the observed normalized lag code and a shuffled copy.
-    """
+    """Construct a semigroup batch from observed and shuffled time lags."""
     x0 = xb[..., :-1]
     dt1_norm = xb[..., -1:]
 

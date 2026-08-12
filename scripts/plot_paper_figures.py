@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Create manuscript-facing PDF figures from completed FiLM-OSG experiment summaries.
-
-The script intentionally consumes already evaluated CSV summaries. It does not
-launch training or evaluation jobs.
-"""
+"""Create manuscript figures from completed FiLM-OSG summaries."""
 
 from __future__ import annotations
 

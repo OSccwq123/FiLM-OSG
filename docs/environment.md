@@ -62,7 +62,7 @@ Run these before launching any full experiment:
 ```bash
 python -c "from film_osg.datasets.pde import pde_dataset_osg; from film_osg.networks.fno import osg_fno1d, osg_fno2d; from film_osg.models.pde_osg import PDE_osg; print('film_osg imports ok')"
 python train/run_burgers_fno.py --help
-python eval/eval_burgers_fno.py --check-only --skip-missing
+python eval/eval_burgers_fno.py --help
 python profiling/profile_ns_overhead.py --check-only --models fno,fno_film
 ```
 

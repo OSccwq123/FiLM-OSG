@@ -1,4 +1,4 @@
-"""FNO backbones for FiLM-OSG reproducibility experiments.
+"""Fourier neural operator backbones used in the FiLM-OSG experiments.
 
 Portions of this module are adapted from the DUE project:
 https://github.com/AI4Equations/due
@@ -372,12 +372,7 @@ class osg_fno2d_with_film(nn):
         return y.numpy()
 
 class vt_fno2d_with_film(osg_fno2d_with_film):
-    """Time-conditioned FiLM-FNO baseline with direct next-state prediction.
-
-    This is an external variable-time baseline: the lag is used only by the
-    FiLM encoder, while the network directly predicts the normalized next
-    state. It intentionally does not use the OSG outer-increment update.
-    """
+    """Variable-time FiLM-FNO with direct next-state prediction."""
 
     def forward(self, x):
         x0 = x[..., :-1]
@@ -414,25 +409,7 @@ class vt_fno2d_with_film(osg_fno2d_with_film):
 
 
 class osg_fno2d_with_film_ablation(osg_fno2d_with_film):
-    """
-    FiLM-OSG-FNO ablation variant.
-
-    This class reuses the standard FiLM-OSG-FNO implementation but allows
-    controlled ablations of the FiLM modulation.
-
-    Supported config keys:
-        film_mode:
-            "full"       -> gamma + beta
-            "gamma_only" -> gamma only, beta disabled
-            "beta_only"  -> beta only, gamma disabled
-            "none"       -> no FiLM modulation
-
-        film_placement:
-            "all"   -> apply FiLM at every FNO block
-            "last"  -> apply FiLM only at the last FNO block
-            "first" -> apply FiLM only at the first FNO block
-            "none"  -> apply no FiLM modulation
-    """
+    """FiLM-OSG-FNO with selectable modulation terms and block locations."""
 
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super(osg_fno2d_with_film_ablation, self).__init__(
@@ -474,12 +451,7 @@ class osg_fno2d_with_film_ablation(osg_fno2d_with_film):
         raise RuntimeError(f"Unhandled film_placement={self.film_placement}")
 
     def _apply_film_mode(self, gammas, betas):
-        """
-        gammas, betas have shape [B, nblocks, hid_dim].
-        We keep the same time_encoder output size across variants. This makes
-        the ablation change only how the modulation is used, rather than
-        changing the surrounding FNO structure.
-        """
+        """Select gain, shift, or full FiLM without changing tensor shapes."""
         if self.film_mode == "full":
             return gammas, betas
 
@@ -657,9 +629,7 @@ class Lightweight_osg_fno2d(nn):
         return y.numpy()
     
 class dual_osg_fno2d(osg_fno2d):
-    """
-    Dual-OSG_FNO2D built upon two OSG-FNO2D networks and a gating network
-    """
+    """Mixture of two OSG-FNO models with a lag-dependent gate."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super().__init__(vmin, vmax, tmin, tmax, config, multiscale)
         
@@ -686,15 +656,11 @@ class dual_osg_fno2d(osg_fno2d):
         return p[..., 0:1] * y1 + p[..., 1:2] * y2
     
     def update_temperature(self, new_temperature):
-        """
-        update the temperature parameter 
-        """
+        """Set the gate temperature."""
         self.current_temperature = torch.tensor(new_temperature, device=self.current_temperature.device)
 
     def get_gate_weights(self, dt_norm):
-        """
-        get the gate weights for given normalized time steps
-        """
+        """Return gate weights for normalized time lags."""
         with torch.no_grad():
             p = torch.nn.Softmax(dim=-1)(
                 self.gate[1](self.activation(self.gate[0](dt_norm))) / self.current_temperature
@@ -703,9 +669,7 @@ class dual_osg_fno2d(osg_fno2d):
 
 
 class dual_osg_fno2d_with_film(osg_fno2d_with_film):
-    """
-    Dual-OSG_FNO2D with FiLM built upon two OSG-FNO2D-FiLM networks and a gating network
-    """
+    """Mixture of two FiLM-OSG-FNO models with a lag-dependent gate."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super().__init__(vmin, vmax, tmin, tmax, config, multiscale)
         
@@ -797,7 +761,7 @@ class MLP1d(nn):
         return x
 
 class GlobalLocalFNOBlock1d(nn):
-    """Lag-ready global-local FNO block for sharp-front Burgers tests."""
+    """One-dimensional FNO block with spectral and local branches."""
 
     def __init__(self, channels, modes, activation, kernel_size=5, pool_factor=2, layer_scale=1e-3):
         super().__init__()
@@ -889,13 +853,7 @@ class osg_fno1d(nn):
         self.de = MLP1d(self.hid_dim, self.output_dim, self.hid_dim * 4, self.activation)
 
     def forward(self, x):
-        """
-        Forward pass for FNO1D
-        
-        Args:
-            x: input tensor of shape (batch_size, L, input_dim) 
-               where input_dim = problem_dim + 1 = 2 (u + dt)
-        """
+        """Evaluate the one-dimensional OSG-FNO update."""
         x0 = x[..., :-1]
         
 
@@ -922,26 +880,15 @@ class osg_fno1d(nn):
         return x0 + x * dt
         
     def predict(self, x, dt, device):
-        """
-        Predict trajectories given initial conditions
-
-        Args:
-            x: unnormalized initial conditions, numpy array (N, L, D)
-            dt: time steps, numpy array (N, steps)
-            device: computation device
-
-        Returns:
-            y: unnormalized predictions, numpy array (N, L, D, steps+1)
-        """
+        """Roll out unnormalized states over the supplied time lags."""
         self.to(device)
         assert x.shape[-1] == self.output_dim
         steps = dt.shape[1]
 
-        # ---- 强制用 CPU 版 vmin/vmax 做归一化，避免 checkpoint/map_location 造成设备混用 ----
+        # Normalize on CPU so checkpoints loaded with map_location remain valid.
         vmin = self.vmin.detach().cpu()
         vmax = self.vmax.detach().cpu()
 
-        # ---- dt: CPU -> normalize -> device ----
         dt = torch.from_numpy(dt).float()
         dt = torch.unsqueeze(dt, 1)                  # (N, 1, steps)
         dt = torch.tile(dt, [1, x.shape[1], 1])     # (N, L, steps)
@@ -950,7 +897,6 @@ class osg_fno1d(nn):
         dt = 2 * (dt - 0.5 * (self.tmax + self.tmin)) / (self.tmax - self.tmin)
         dt = dt.to(device)
 
-        # ---- x: CPU 上归一化，再搬到 device ----
         x = torch.from_numpy(x).float()
         x = 2 * (x - 0.5 * (vmax[..., 0] + vmin[..., 0])) / (
             vmax[..., 0] - vmin[..., 0]
@@ -966,7 +912,6 @@ class osg_fno1d(nn):
                 pred = self.forward(xx)
                 y = torch.cat((y, torch.unsqueeze(pred, dim=-1)), dim=-1)
 
-        # ---- 回 CPU 后再反归一化 ----
         y = y.cpu()
         y = y * 0.5 * (vmax - vmin) + 0.5 * (vmax + vmin)
 
@@ -1078,26 +1023,15 @@ class osg_fno1d_with_film(nn):
         return x0 + x * dt
     
     def predict(self, x, dt, device):
-        """
-        Predict trajectories given initial conditions
-
-        Args:
-            x: unnormalized initial conditions, numpy array (N, L, D)
-            dt: time steps, numpy array (N, steps)
-            device: computation device
-
-        Returns:
-            y: unnormalized predictions, numpy array (N, L, D, steps+1)
-        """
+        """Roll out unnormalized states over the supplied time lags."""
         self.to(device)
         assert x.shape[-1] == self.output_dim
         steps = dt.shape[1]
 
-        # ---- 强制用 CPU 版 vmin/vmax 做归一化，避免 checkpoint/map_location 造成设备混用 ----
+        # Normalize on CPU so checkpoints loaded with map_location remain valid.
         vmin = self.vmin.detach().cpu()
         vmax = self.vmax.detach().cpu()
 
-        # ---- dt: CPU -> normalize -> device ----
         dt = torch.from_numpy(dt).float()
         dt = torch.unsqueeze(dt, 1)                  # (N, 1, steps)
         dt = torch.tile(dt, [1, x.shape[1], 1])     # (N, L, steps)
@@ -1106,7 +1040,6 @@ class osg_fno1d_with_film(nn):
         dt = 2 * (dt - 0.5 * (self.tmax + self.tmin)) / (self.tmax - self.tmin)
         dt = dt.to(device)
 
-        # ---- x: CPU 上归一化，再搬到 device ----
         x = torch.from_numpy(x).float()
         x = 2 * (x - 0.5 * (vmax[..., 0] + vmin[..., 0])) / (
             vmax[..., 0] - vmin[..., 0]
@@ -1122,7 +1055,6 @@ class osg_fno1d_with_film(nn):
                 pred = self.forward(xx)
                 y = torch.cat((y, torch.unsqueeze(pred, dim=-1)), dim=-1)
 
-        # ---- 回 CPU 后再反归一化 ----
         y = y.cpu()
         y = y * 0.5 * (vmax - vmin) + 0.5 * (vmax + vmin)
 
@@ -1130,11 +1062,7 @@ class osg_fno1d_with_film(nn):
 
 
 class vt_fno1d_with_film(osg_fno1d_with_film):
-    """Time-conditioned FiLM-FNO baseline with direct next-state prediction.
-
-    The lag modulates hidden channels through FiLM, but the model is not an
-    operator semigroup and does not apply the outer-increment update.
-    """
+    """Variable-time FiLM-FNO with direct next-state prediction."""
 
     def forward(self, x):
         x0 = x[..., :-1]
@@ -1168,7 +1096,7 @@ class vt_fno1d_with_film(osg_fno1d_with_film):
 
 
 class gl_osg_fno1d(nn):
-    """Global-local direct-lag OSG-FNO for low-risk sharp-front diagnostics."""
+    """Global--local direct-lag OSG-FNO for one-dimensional data."""
 
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super(gl_osg_fno1d, self).__init__()

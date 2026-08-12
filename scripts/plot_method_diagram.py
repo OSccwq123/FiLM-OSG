@@ -78,13 +78,10 @@ METHOD_CAPTION = (
     "Schematic of the FiLM-OSG architecture. The queried lag is encoded into a "
     "latent time code and mapped to FiLM coefficients that modulate the global "
     "FNO backbone inside an outer-increment semigroup update. The mean-zero "
-    "projection is a lightweight structure-preserving diagnostic for periodic "
-    "mean-preserving benchmarks and is not part of the default update. The dashed inset shows the optional GL-FiLM "
+    "projection is used in the mean-preserving experiments. The dashed inset "
+    "shows the optional GL-FiLM "
     "extension used for sharp-front Burgers experiments, where a lag-conditioned "
-    "local residual correction is coupled back into the decoded increment. "
-    "Training objectives, including semigroup consistency and optional "
-    "high-frequency penalties, are specified in the text rather than encoded as "
-    "architecture modules."
+    "local residual correction is coupled back into the decoded increment."
 )
 
 
@@ -187,14 +184,14 @@ def draw_method(out_dir: Path):
         bbox={"boxstyle": "round,pad=0.12", "facecolor": "white", "edgecolor": "none", "alpha": 0.85},
     )
 
-    # External variable-time baselines, shown outside the OSG path.
+    # Variable-time baselines are shown outside the OSG path.
     box(ax, (0.025, 0.11), 0.13, 0.115, "VT baselines\nVT-FNO / VT-FiLM\n(no OSG loss)", COLORS["baseline"], 7.8)
     arrow(ax, (0.078, 0.385), (0.078, 0.225), color="#6B7280", lw=0.95)
 
     ax.text(
         0.035,
         0.035,
-        "Core FiLM-OSG uses the unprojected outer-increment update; projection is an optional mean-preservation diagnostic. GL-FiLM is a targeted sharp-front extension.",
+        "Projection and the global--local branch are used only in the corresponding experiments.",
         fontsize=8.8,
         color=COLORS["muted"],
     )

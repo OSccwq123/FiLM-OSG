@@ -1,9 +1,8 @@
-"""OSG-aware PDE training wrapper for FiLM-OSG reproducibility experiments.
+"""PDE training with the OSG semigroup loss.
 
 Portions of this module are adapted from the DUE project:
 https://github.com/AI4Equations/due
-DUE is distributed under the LGPL-2.1 license. Local changes here preserve the
-semigroup-aware training interface used by the FiLM-OSG experiments.
+DUE is distributed under the LGPL-2.1 license.
 """
 
 from time import time
@@ -11,31 +10,7 @@ from ..utils import *
 from .pde import PDE
 
 class PDE_osg(PDE):
-    """
-    Class representing a partial differential equation (PDE) with semigroup regularization.
-
-    Args:
-        trainX (torch.Tensor): The input training data.
-        trainY (torch.Tensor): The target training data.
-        osg_data (tuple): A tuple containing the OSG data (u0_rand, dt_rand). Default is None.
-        network (torch.nn.Module): The neural network model.
-        config (dict): A dictionary containing configuration parameters.
-
-    Attributes:
-        sg_pairing (int): The non-negative integer representing the sg pairing.
-        sg_weight (float): The weight for the sg regularization.
-        vmin (float): The minimum value of the network's vmin.
-        vmax (float): The maximum value of the network's vmax.
-        tmin (float): The minimum value of the network's tmin.
-        tmax (float): The maximum value of the network's tmax.
-        u0_rand (torch.Tensor): The random initial condition.
-        dt_rand (torch.Tensor): The random time step.
-        train_loader (torch.utils.data.DataLoader): The data loader for training.
-
-    Methods:
-        osg_regularization: Performs OSG regularization.
-        train: Trains the PDE model.
-    """
+    """Train a PDE model with supervised and semigroup losses."""
     def __init__(self, trainX, trainY, osg_data, network, config):
         super(PDE_osg, self).__init__(trainX, trainY, network, config)
         

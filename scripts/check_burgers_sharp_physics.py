@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Check sharp-front Burgers physics diagnostics.
-
-This script complements ``check_burgers_sharp_data.py`` by focusing on
-maximum-principle-style overshoot/undershoot diagnostics and mean conservation.
-"""
+"""Check overshoot, undershoot, and mean drift in the Burgers data."""
 
 from __future__ import annotations
 
