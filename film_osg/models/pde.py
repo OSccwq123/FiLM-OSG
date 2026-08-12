@@ -136,7 +136,6 @@ class PDE:
 
     def summary(self):
         """Print all trainable variables."""
-        # TODO: backend tensorflow, pytorch
         print("Number of trainable parameters:", self.mynet.count_params())
         print()
         print("Number of epochs:", self.nepochs)
@@ -155,6 +154,5 @@ class PDE:
 
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
-
 
 

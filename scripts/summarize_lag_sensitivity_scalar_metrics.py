@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Summarize lag-sensitivity spectral energy and effective rank.
 
-The CSV field names retain ``nonzero_fraction`` for compatibility with the
-internal evaluation outputs. The reported quantity is an energy fraction: the
+The CSV field names retain ``nonzero_fraction`` to match the evaluation output.
+The reported quantity is an energy fraction: the
 sum of lag-sensitivity spectral energy outside the zero mode, normalized by the
 corresponding full or selected-band energy.
 """
