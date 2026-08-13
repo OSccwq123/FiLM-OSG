@@ -18,6 +18,14 @@ if isempty(script_dir)
     script_dir = pwd;
 end
 
+output_dir = getenv('FILM_OSG_OUTPUT_DIR');
+if isempty(output_dir)
+    output_dir = script_dir;
+end
+if ~exist(output_dir, 'dir')
+    mkdir(output_dir);
+end
+
 %% Parameters
 alpha1 = 1.0;
 alpha2 = 0.5;
@@ -83,7 +91,7 @@ end
 fprintf('Training data shapes:\n');
 fprintf('  dt: %s\n', mat2str(size(dt)));
 fprintf('  trajectories: %s\n', mat2str(size(trajectories)));
-save(fullfile(script_dir, 'train_data.mat'), 'coordinates', 'dt', 'trajectories');
+save(fullfile(output_dir, 'train_data.mat'), 'coordinates', 'dt', 'trajectories');
 assert_shape(size(coordinates), [N, N, 2], 'train coordinates');
 assert_shape(size(dt), [n_train_trajectories, train_steps], 'train dt');
 assert_shape(size(trajectories), ...
@@ -119,14 +127,14 @@ end
 fprintf('Test data shapes:\n');
 fprintf('  dt: %s\n', mat2str(size(dt)));
 fprintf('  trajectories: %s\n', mat2str(size(trajectories)));
-save(fullfile(script_dir, 'test_data.mat'), 'dt', 'trajectories');
+save(fullfile(output_dir, 'test_data.mat'), 'coordinates', 'dt', 'trajectories');
 assert_shape(size(dt), [n_test_trajectories, test_steps], 'test dt');
 assert_shape(size(trajectories), ...
     [n_test_trajectories, N, N, 1, test_steps + 1], ...
     'test trajectories');
 
 fprintf('\nData generation complete.\n');
-fprintf('Output directory: %s\n', script_dir);
+fprintf('Output directory: %s\n', output_dir);
 fprintf('Generated files:\n');
 fprintf('  train_data.mat\n');
 fprintf('  test_data.mat\n');

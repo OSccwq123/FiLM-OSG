@@ -14,14 +14,11 @@ Smoke tests were run with:
 - NumPy `1.26.4`
 - SciPy `1.16.3`
 - Matplotlib `3.10.7`
-- PyYAML `6.0.3`
 - NVIDIA CUDA GPU with sufficient memory for the selected batch size
 
-The launchers are not tied to a specific GPU model. They print the
-PyTorch-visible CUDA mapping and accept any available CUDA GPU by default.
-Memory profiling uses PyTorch CUDA APIs; if `nvidia-smi` reports an NVML
-driver/library warning, check whether PyTorch can still see CUDA before
-launching full experiments.
+The launchers are not tied to a specific GPU model. GPU ids are passed through
+`--gpus`, and each child process receives one id through
+`CUDA_VISIBLE_DEVICES`. Memory profiling uses PyTorch CUDA APIs.
 
 ## Recommended Clean Conda Environment
 
@@ -44,16 +41,18 @@ Then install the repository's minimal Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
-## Optional Dependencies
+## Data Readers
 
-The current smoke-tested `.mat` files are readable through `scipy.io.loadmat`.
-If future MATLAB files are saved as v7.3/HDF5 files, install optional readers:
+The current `.mat` files are read with `scipy.io.loadmat`. The `h5py` package
+listed in `requirements.txt` is used by the PDEBench conversion script. If a
+MATLAB dataset is saved in the v7.3 format, install `mat73` separately:
 
 ```bash
-python -m pip install h5py mat73
+python -m pip install mat73
 ```
 
-These optional packages are not required for the current smoke-tested data path.
+This additional package is not required for the datasets described in
+`data/README.md`.
 
 ## Minimal Checks
 
@@ -63,13 +62,13 @@ Run these before launching any full experiment:
 python -c "from film_osg.datasets.pde import pde_dataset_osg; from film_osg.networks.fno import osg_fno1d, osg_fno2d; from film_osg.models.pde_osg import PDE_osg; print('film_osg imports ok')"
 python train/run_burgers_fno.py --help
 python eval/eval_burgers_fno.py --help
-python profiling/profile_ns_overhead.py --check-only --models fno,fno_film
+python profiling/profile_ns_overhead.py --help
 ```
 
 For a short real smoke test when the Burgers `.mat` files are present:
 
 ```bash
-python train/run_burgers_fno.py --model fno --seed 0 --epochs 1 --batch-size 100 --tag nodue_smoke
-python train/run_burgers_fno.py --model fno_film --seed 0 --epochs 1 --batch-size 100 --tag nodue_smoke
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag nodue_smoke --eval-steps 1 --save-dir eval_outputs_burgers_nodue_smoke
+python train/run_burgers_fno.py --model fno --seed 0 --epochs 1 --batch-size 100 --tag smoke
+python train/run_burgers_fno.py --model fno_film --seed 0 --epochs 1 --batch-size 100 --tag smoke
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag smoke --eval-steps 1 --save-dir eval_outputs_burgers_smoke
 ```

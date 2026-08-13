@@ -17,14 +17,7 @@
 %
 clear; clc;
 
-seed_text = getenv('FILM_OSG_FIXED_LAG_SEED');
-if isempty(seed_text)
-    fixed_lag_seed = 100042;
-else
-    fixed_lag_seed = str2double(seed_text);
-    assert(isfinite(fixed_lag_seed) && fixed_lag_seed == floor(fixed_lag_seed), ...
-        'FILM_OSG_FIXED_LAG_SEED must be an integer.');
-end
+fixed_lag_seed = 100042;
 rng(fixed_lag_seed);
 
 script_path = mfilename('fullpath');
@@ -91,9 +84,6 @@ end
 %% Generate one file per fixed lag.
 for lag_idx = 1:numel(fixed_lags)
     fixed_dt = fixed_lags(lag_idx);
-    assert(fixed_dt < train_dt_min || fixed_dt > train_dt_max, ...
-        'Diagnostic lag %.6g is inside the training interval.', fixed_dt);
-
     dt = fixed_dt * ones(n_test_trajectories, test_steps);
     trajectories = zeros(n_test_trajectories, N, N, 1, test_steps + 1);
 
@@ -115,8 +105,6 @@ for lag_idx = 1:numel(fixed_lags)
 
     out_name = sprintf('test_data_fixed_dt_%s.mat', lag_to_token(fixed_dt));
     out_path = fullfile(output_dir, out_name);
-    assert(~exist(out_path, 'file'), ...
-        'Refusing to overwrite existing file: %s', out_path);
     generator_seed = fixed_lag_seed;
     save(out_path, 'coordinates', 'dt', 'trajectories', 'generator_seed', '-v7');
 

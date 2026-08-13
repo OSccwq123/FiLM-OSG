@@ -20,15 +20,14 @@ The repository includes the following generation scripts:
   training lag interval.
 - `scripts/data_generation/generate_burgers_sharp_osg.py`: generates the
   sharp-front inviscid Burgers extension with conservative averaging.
-- `scripts/data_generation/convert_pdebench_to_osg.py`: converts local
-  PDEBench HDF5 trajectories to trajectory-disjoint variable-lag pairs.
+- `scripts/data_generation/convert_pdebench_to_osg.py`: forms the
+  trajectory-disjoint variable-lag PDEBench datasets used in the paper.
 - `scripts/data_generation/check_osg_mat_data.py`: checks the converted array
   shapes, coordinates, state values, and time lags.
 
-The MATLAB generators write their `.mat` outputs into the MATLAB working
-directory. Run them with `<repo>/data` as the working directory, or move the
-outputs into `<repo>/data` after generation. The Python sharp-front generator
-accepts `--out-dir` explicitly, for example:
+The MATLAB generators write beside the scripts by default. Set the environment
+variable `FILM_OSG_OUTPUT_DIR` to write elsewhere. The Python sharp-front
+generator accepts `--out-dir` explicitly, for example:
 
 ```bash
 python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
@@ -53,14 +52,16 @@ commands are given in `docs/reproduction.md`.
 
 ## Expected Files
 
-| File | Benchmark | Approx. size | SHA256 |
-| --- | --- | ---: | --- |
-| `BurgersOSG_train.mat` | Burgers train | 2.1 MB | `DB5C7D039F3D702482143117B7F6095B5BBEF97120417ABE9F6CA1CA0A3C0C29` |
-| `BurgersOSG_test.mat` | Burgers test | 0.5 MB | `479DB3CE5DD4682059616DFA179CFFE54F952866A8DA589EBCBFD80F4D354763A` |
-| `train_data.mat` | Advection--diffusion train | 160.3 MB | `2C55E2383568651314441F2CE72D939AAA626791DFAB49B28D14A0FD974EC5415` |
-| `test_data.mat` | Advection--diffusion test | 314.2 MB | `3AE494645587052D3C8339DF1F3E578D07DC0EAD731DB919A0BF760C6A83C8E84` |
-| `VorticityOSG_train.mat` | Navier--Stokes train | 93.1 MB | `0EBDD969D52292B43304D3583B3CD432C288397B367F75372D06944D629C5D111` |
-| `VorticityOSG_test.mat` | Navier--Stokes test | 182.0 MB | `A1E0A3A0FDF63C1EC33622BC21BD7889BF4A14078F86D63E07D8AE2BAB74D926A` |
+| File | Benchmark | Approx. size |
+| --- | --- | ---: |
+| `BurgersOSG_train.mat` | Burgers train | 2.1 MB |
+| `BurgersOSG_test.mat` | Burgers test | 0.5 MB |
+| `burgers_sharp/BurgersSharpOSG_train.mat` | Burgers with steep gradients, train | generated locally |
+| `burgers_sharp/BurgersSharpOSG_test.mat` | Burgers with steep gradients, test | generated locally |
+| `train_data.mat` | Advection--diffusion train | 160.3 MB |
+| `test_data.mat` | Advection--diffusion test | 314.2 MB |
+| `VorticityOSG_train.mat` | Navier--Stokes train | 93.1 MB |
+| `VorticityOSG_test.mat` | Navier--Stokes test | 182.0 MB |
 
 The repository `.gitignore` keeps `*.mat` files out of normal git commits. Some
 files exceed GitHub's regular 100 MB file limit. Do not commit `.mat` files to
@@ -83,7 +84,3 @@ Expected variable names:
 Scripted benchmarks use endpoint-excluded periodic grids. For example, the
 advection--diffusion grid uses `x = -pi + (0:N-1) * (2*pi/N)` rather than
 `linspace(-pi, pi, N)`, so the coordinate metadata matches the periodic FFT grid.
-
-The stored checksums above document the local `.mat` files used for the reported
-experiments. If generation scripts are edited or rerun under a different MATLAB
-version, regenerate the checksums before publishing data artifacts.

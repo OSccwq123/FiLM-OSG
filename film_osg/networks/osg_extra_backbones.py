@@ -5,13 +5,11 @@ base class.
 The DUE project is available at https://github.com/AI4Equations/due and is
 distributed under the LGPL-2.1 license.
 
-U-NO-style, Transolver-style, and MambaNO-style denote OSG-adapted variants
-inspired by the corresponding papers and public projects. Inputs have shape
+U-NO-style and Transolver-style denote OSG-adapted variants inspired by the
+corresponding papers and public projects. Inputs have shape
 `(B, H, W, C + 1)`, with the normalized lag in the last channel.
-
-The MambaNO-style variants require `mamba_ssm`, which is distributed under
-Apache-2.0. Functional activations are wrapped with `ActivationModule` when
-used in `torch.nn.Sequential`.
+Functional activations are wrapped with `ActivationModule` when used in
+`torch.nn.Sequential`.
 """
 
 import torch
@@ -19,15 +17,6 @@ import torch.nn.functional as F
 
 from .nn import nn as DUEBase
 from ..utils import get_activation
-
-
-try:
-    from mamba_ssm import Mamba as _OfficialMamba
-except Exception as exc:
-    _OfficialMamba = None
-    _MAMBA_IMPORT_ERROR = exc
-else:
-    _MAMBA_IMPORT_ERROR = None
 
 
 class ActivationModule(torch.nn.Module):
@@ -387,219 +376,6 @@ class osg_uno2d_with_film(BaseOSG2D):
         u1 = self.activation(apply_film_2d(u1, *film[5]))
 
         incr = self.proj(u1 + h0).permute(0, 2, 3, 1)
-        return x0 + dt * incr
-
-
-class MambaTokenMixer(torch.nn.Module):
-    """Token mixer based on `mamba_ssm.Mamba`."""
-    def __init__(self, width, d_state=16, d_conv=4, expand=2):
-        super().__init__()
-        if _OfficialMamba is None:
-            raise ImportError(
-                "The MambaNO-style models require the optional 'mamba_ssm' package."
-            ) from _MAMBA_IMPORT_ERROR
-        self.mixer = _OfficialMamba(
-            d_model=width,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-
-    def forward(self, x):
-        return self.mixer(x)
-
-
-class MambaNOBlock2d(torch.nn.Module):
-    """Row, column, and local mixing followed by a pointwise MLP."""
-    def __init__(self, width, activation, d_state=16, d_conv=4, expand=2):
-        super().__init__()
-        self.width = int(width)
-
-        self.norm_row = torch.nn.LayerNorm(width)
-        self.norm_col = torch.nn.LayerNorm(width)
-        self.norm_local = torch.nn.LayerNorm(width)
-        self.norm_mlp = torch.nn.LayerNorm(width)
-
-        self.row_mixer = MambaTokenMixer(
-            width,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-        self.col_mixer = MambaTokenMixer(
-            width,
-            d_state=d_state,
-            d_conv=d_conv,
-            expand=expand,
-        )
-
-        self.local = torch.nn.Sequential(
-            torch.nn.Conv2d(width, width, kernel_size=3, padding=1, groups=width),
-            torch.nn.Conv2d(width, width, kernel_size=1),
-        )
-
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(width, 4 * width),
-            as_module_activation(activation),
-            torch.nn.Linear(4 * width, width),
-        )
-
-        self.scale = torch.nn.Parameter(torch.ones(3))
-
-    def forward(self, x, H, W, film=None):
-        B, N, C = x.shape
-        assert N == H * W
-
-        row_in = self.norm_row(x)
-        if film is not None:
-            row_in = apply_film_tokens(row_in, *film)
-        row = self.row_mixer(row_in)
-
-        x_img = x.reshape(B, H, W, C)
-        col_tokens = x_img.transpose(1, 2).reshape(B, W * H, C)
-
-        col_in = self.norm_col(col_tokens)
-        if film is not None:
-            col_in = apply_film_tokens(col_in, *film)
-
-        col = self.col_mixer(col_in)
-        col = col.reshape(B, W, H, C).transpose(1, 2).reshape(B, H * W, C)
-
-        local_in = self.norm_local(x)
-        if film is not None:
-            local_in = apply_film_tokens(local_in, *film)
-
-        local = local_in.reshape(B, H, W, C).permute(0, 3, 1, 2)
-        local = self.local(local).permute(0, 2, 3, 1).reshape(B, H * W, C)
-
-        weights = torch.softmax(self.scale, dim=0)
-        x = x + weights[0] * row + weights[1] * col + weights[2] * local
-
-        mlp_in = self.norm_mlp(x)
-        if film is not None:
-            mlp_in = apply_film_tokens(mlp_in, *film)
-
-        x = x + self.mlp(mlp_in)
-
-        return x
-
-class osg_mambano2d(BaseOSG2D):
-    """Direct-lag OSG-MambaNO-style backbone."""
-    def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
-        super().__init__()
-        self.register_buffer("vmin", torch.from_numpy(vmin).float())
-        self.register_buffer("vmax", torch.from_numpy(vmax).float())
-
-        self.tmin = tmin
-        self.tmax = tmax
-        self.multiscale = multiscale
-
-        self.output_dim = config["problem_dim"]
-        self.width = int(config.get("width", 20))
-        self.depth = int(config.get("depth", 4))
-        self.activation = get_activation(config["activation"])
-
-        self.d_state = int(config.get("mamba_d_state", 16))
-        self.d_conv = int(config.get("mamba_d_conv", 4))
-        self.expand = int(config.get("mamba_expand", 2))
-
-        self.en = torch.nn.Linear(self.output_dim + 1 + 2, self.width)
-        self.blocks = torch.nn.ModuleList([
-            MambaNOBlock2d(
-                self.width,
-                self.activation,
-                d_state=self.d_state,
-                d_conv=self.d_conv,
-                expand=self.expand,
-            )
-            for _ in range(self.depth)
-        ])
-        self.de = torch.nn.Sequential(
-            torch.nn.LayerNorm(self.width),
-            torch.nn.Linear(self.width, 4 * self.width),
-            as_module_activation(self.activation),
-            torch.nn.Linear(4 * self.width, self.output_dim),
-        )
-
-    def forward(self, x):
-        x0 = x[..., :-1]
-        dt_norm = x[..., -1:]
-        dt = decode_dt(dt_norm, self.tmin, self.tmax, self.multiscale)
-
-        B, H, W, _ = x0.shape
-        grid = make_grid_features(B, H, W, x.device, x.dtype)
-        feat = torch.cat((grid, x0, dt_norm), dim=-1)
-
-        h = self.en(feat).reshape(B, H * W, self.width)
-        for block in self.blocks:
-            h = block(h, H, W)
-
-        incr = self.de(h).reshape(B, H, W, self.output_dim)
-        return x0 + dt * incr
-
-
-class osg_mambano2d_with_film(BaseOSG2D):
-    """FiLM-OSG-MambaNO-style backbone."""
-    def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
-        super().__init__()
-        self.register_buffer("vmin", torch.from_numpy(vmin).float())
-        self.register_buffer("vmax", torch.from_numpy(vmax).float())
-
-        self.tmin = tmin
-        self.tmax = tmax
-        self.multiscale = multiscale
-
-        self.output_dim = config["problem_dim"]
-        self.width = int(config.get("width", 20))
-        self.depth = int(config.get("depth", 4))
-        self.activation = get_activation(config["activation"])
-
-        self.d_state = int(config.get("mamba_d_state", 16))
-        self.d_conv = int(config.get("mamba_d_conv", 4))
-        self.expand = int(config.get("mamba_expand", 2))
-
-        self.en = torch.nn.Linear(self.output_dim + 2, self.width)
-        self.blocks = torch.nn.ModuleList([
-            MambaNOBlock2d(
-                self.width,
-                self.activation,
-                d_state=self.d_state,
-                d_conv=self.d_conv,
-                expand=self.expand,
-            )
-            for _ in range(self.depth)
-        ])
-        self.de = torch.nn.Sequential(
-            torch.nn.LayerNorm(self.width),
-            torch.nn.Linear(self.width, 4 * self.width),
-            as_module_activation(self.activation),
-            torch.nn.Linear(4 * self.width, self.output_dim),
-        )
-
-        self.film_channels = [self.width for _ in range(self.depth)]
-        self.time_encoder = make_time_encoder(
-            int(config.get("time_width", self.width)),
-            self.film_channels,
-        )
-
-    def forward(self, x):
-        x0 = x[..., :-1]
-        dt_norm = x[..., -1:]
-        dt = decode_dt(dt_norm, self.tmin, self.tmax, self.multiscale)
-
-        B, H, W, _ = x0.shape
-        grid = make_grid_features(B, H, W, x.device, x.dtype)
-        dt_scalar = dt_norm.mean(dim=(1, 2))
-
-        film = split_film(self.time_encoder(dt_scalar), self.film_channels)
-
-        feat = torch.cat((grid, x0), dim=-1)
-        h = self.en(feat).reshape(B, H * W, self.width)
-
-        for i, block in enumerate(self.blocks):
-            h = block(h, H, W, film=film[i])
-
-        incr = self.de(h).reshape(B, H, W, self.output_dim)
         return x0 + dt * incr
 
 

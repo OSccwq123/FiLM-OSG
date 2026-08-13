@@ -1,15 +1,7 @@
-"""Paper-matched Navier--Stokes partition-robustness evaluation.
-
-This diagnostic compares terminal predictions obtained from a fixed collection
-of admissible variable-step partitions of the same terminal time. It matches
-the definition used for the manuscript partition-robustness table. The existing
-``eval_ns_partition_spread.py`` script intentionally remains a separate,
-equal-partition/high-frequency diagnostic.
-"""
+"""Evaluate Navier--Stokes rollouts over several partitions of the same time."""
 
 import argparse
 import csv
-import json
 import os
 import sys
 from pathlib import Path
@@ -232,6 +224,50 @@ def summarize(seedwise_rows):
     return summaries
 
 
+def summarize_pairs(seedwise_rows, baseline="fno", conditioned="fno_film"):
+    lookup = {
+        (row["model"], int(row["seed"]), int(row["T"])): row
+        for row in seedwise_rows
+    }
+    horizons = sorted({int(row["T"]) for row in seedwise_rows})
+    summaries = []
+    for terminal_time in horizons:
+        seeds = sorted(
+            {seed for model, seed, horizon in lookup if model == baseline and horizon == terminal_time}
+            & {seed for model, seed, horizon in lookup if model == conditioned and horizon == terminal_time}
+        )
+        if not seeds:
+            continue
+
+        base_error = np.asarray(
+            [lookup[(baseline, seed, terminal_time)]["avg_terminal_rel_l2_over_partitions"] for seed in seeds]
+        )
+        cond_error = np.asarray(
+            [lookup[(conditioned, seed, terminal_time)]["avg_terminal_rel_l2_over_partitions"] for seed in seeds]
+        )
+        base_spread = np.asarray(
+            [lookup[(baseline, seed, terminal_time)]["pairwise_partition_spread_mean"] for seed in seeds]
+        )
+        cond_spread = np.asarray(
+            [lookup[(conditioned, seed, terminal_time)]["pairwise_partition_spread_mean"] for seed in seeds]
+        )
+        spread_reduction = 100.0 * (base_spread - cond_spread) / base_spread
+        summaries.append(
+            {
+                "T": terminal_time,
+                "baseline": baseline,
+                "conditioned": conditioned,
+                "num_paired_seeds": len(seeds),
+                "seeds": ",".join(str(seed) for seed in seeds),
+                "baseline_terminal_rel_l2_median": float(np.median(base_error)),
+                "conditioned_terminal_rel_l2_median": float(np.median(cond_error)),
+                "conditioned_terminal_error_wins": int(np.sum(cond_error < base_error)),
+                "partition_spread_reduction_percent_median": float(np.median(spread_reduction)),
+            }
+        )
+    return summaries
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -329,31 +365,17 @@ def main():
     seedwise_path = os.path.join(args.save_dir, "partition_horizon_seedwise.csv")
     partition_path = os.path.join(args.save_dir, "partition_per_partition_seedwise.csv")
     summary_path = os.path.join(args.save_dir, "partition_summary_by_model_T.csv")
-    metadata_path = os.path.join(args.save_dir, "partition_metadata.json")
+    paired_path = os.path.join(args.save_dir, "partition_paired_summary.csv")
     summaries = summarize(seedwise_rows)
+    paired_summaries = summarize_pairs(seedwise_rows)
     write_csv(seedwise_path, seedwise_rows)
     write_csv(partition_path, partition_rows)
     write_csv(summary_path, summaries)
-    with open(metadata_path, "w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "definition": (
-                    "mean over unordered partition pairs of "
-                    "||prediction_pi(T)-prediction_pj(T)||_2 / ||truth(T)||_2"
-                ),
-                "horizons": horizons,
-                "num_random_partitions": args.num_random,
-                "partition_seed": args.partition_seed,
-                "models": models,
-                "seeds": seeds,
-            },
-            handle,
-            indent=2,
-        )
+    write_csv(paired_path, paired_summaries)
     print("Saved:", seedwise_path, flush=True)
     print("Saved:", partition_path, flush=True)
     print("Saved:", summary_path, flush=True)
-    print("Saved:", metadata_path, flush=True)
+    print("Saved:", paired_path, flush=True)
 
 
 if __name__ == "__main__":

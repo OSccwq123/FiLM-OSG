@@ -1,6 +1,5 @@
 import os
 import csv
-import json
 import time
 import argparse
 import random
@@ -29,16 +28,7 @@ DEFAULT_MODELS = [
     "transolver_film",
 ]
 
-ALL_MODELS = [
-    "fno",
-    "fno_film",
-    "uno",
-    "uno_film",
-    "transolver",
-    "transolver_film",
-    "mambano",
-    "mambano_film",
-]
+ALL_MODELS = DEFAULT_MODELS
 
 
 def resolve_data_paths(data_dir: str | os.PathLike[str]):
@@ -108,10 +98,6 @@ def make_config(model_name: str, save_path: str, seed: int, batch_size: int):
         "dropout": 0.0,
         "mlp_ratio": 4,
 
-        "mamba_d_state": 16,
-        "mamba_d_conv": 4,
-        "mamba_expand": 2,
-
         "time_width": 20,
 
         "save_path": save_path,
@@ -123,8 +109,6 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
     from film_osg.networks.osg_extra_backbones import (
         osg_uno2d,
         osg_uno2d_with_film,
-        osg_mambano2d,
-        osg_mambano2d_with_film,
         osg_transolver2d,
         osg_transolver2d_with_film,
     )
@@ -191,26 +175,6 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
             multiscale=config["multiscale"],
         )
 
-    if model_name == "mambano":
-        return osg_mambano2d(
-            vmin=vmin,
-            vmax=vmax,
-            tmin=tmin,
-            tmax=tmax,
-            config=config,
-            multiscale=config["multiscale"],
-        )
-
-    if model_name == "mambano_film":
-        return osg_mambano2d_with_film(
-            vmin=vmin,
-            vmax=vmax,
-            tmin=tmin,
-            tmax=tmax,
-            config=config,
-            multiscale=config["multiscale"],
-        )
-
     raise ValueError(f"Unknown model_name: {model_name}")
 
 
@@ -255,10 +219,7 @@ def make_sg_batch(xb, tmin, tmax, multiscale=False):
     dt2 = decode_dt(dt2_norm, tmin, tmax, multiscale)
     dt12_norm = encode_dt(dt1 + dt2, tmin, tmax, multiscale)
 
-    x_step1 = torch.cat((x0, dt1_norm), dim=-1)
-    x_direct = torch.cat((x0, dt12_norm), dim=-1)
-
-    return x_step1, dt2_norm, x_direct
+    return x0, dt1_norm, dt2_norm, dt12_norm
 
 
 def training_step(model, xb, yb, optimizer, tmin, tmax, multiscale, sg_mode="aux", sg_weight=1.0):
@@ -270,21 +231,22 @@ def training_step(model, xb, yb, optimizer, tmin, tmax, multiscale, sg_mode="aux
     if sg_mode == "none":
         loss = loss_data
     elif sg_mode == "aux":
-        x_step1, dt2_norm, x_direct = make_sg_batch(
+        x0, dt1_norm, dt2_norm, dt12_norm = make_sg_batch(
             xb,
             tmin=tmin,
             tmax=tmax,
             multiscale=multiscale,
         )
 
-        pred_step1 = model(x_step1)
+        pred01 = model(torch.cat((x0, dt1_norm), dim=-1))
+        pred012 = model(torch.cat((pred01, dt2_norm), dim=-1))
+        pred02 = model(torch.cat((x0, dt2_norm), dim=-1))
+        pred021 = model(torch.cat((pred02, dt1_norm), dim=-1))
+        pred2 = model(torch.cat((x0, dt12_norm), dim=-1))
 
-        x_step2 = torch.cat((pred_step1, dt2_norm), dim=-1)
-        pred_two_step = model(x_step2)
-
-        pred_direct = model(x_direct)
-
-        loss_sg = rel_l2_loss(pred_two_step, pred_direct)
+        loss_sg = 0.5 * (
+            rel_l2_loss(pred012, pred2) + rel_l2_loss(pred021, pred2)
+        )
         loss = (loss_data + sg_weight * loss_sg) / (1.0 + sg_weight)
     else:
         raise ValueError("sg_mode must be 'none' or 'aux'.")
@@ -516,34 +478,14 @@ def main():
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument("--sg-mode", type=str, default="aux", choices=["none", "aux"])
     parser.add_argument("--sg-weight", type=float, default=1.0)
-    parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-
     args = parser.parse_args()
 
     models = parse_str_list(args.models)
-    train_path, test_path = resolve_data_paths(args.data_dir)
+    train_path, _ = resolve_data_paths(args.data_dir)
 
     for m in models:
         if m not in ALL_MODELS:
             raise ValueError(f"Unknown model {m}. Choices: {ALL_MODELS}")
-
-    if args.check_only or args.dry_run:
-        print("=" * 80, flush=True)
-        print("Navier--Stokes overhead profiling check-only", flush=True)
-        print("Models:", models, flush=True)
-        print("Train data exists:", os.path.exists(train_path), train_path, flush=True)
-        print("Test data exists:", os.path.exists(test_path), test_path, flush=True)
-        print("batch_size:", args.batch_size, flush=True)
-        print("warmup:", args.warmup, flush=True)
-        print("timed_iters:", args.iters, flush=True)
-        print("sg_mode:", args.sg_mode, flush=True)
-        print("sg_weight:", args.sg_weight, flush=True)
-        print("device:", args.device, flush=True)
-        print("save_dir:", args.save_dir, flush=True)
-        print("No data loading, model instantiation, or benchmark loops were run.", flush=True)
-        print("=" * 80, flush=True)
-        return
 
     from film_osg.datasets.pde import pde_dataset_osg
 
@@ -562,16 +504,15 @@ def main():
     )
 
     dataset = pde_dataset_osg(load_config)
-    trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
+    trainX, trainY, _, _, vmin, vmax, tmin, tmax, _, _ = dataset.load(
         train_path,
-        test_path,
+        None,
     )
 
     print("=" * 80, flush=True)
     print("Navier--Stokes overhead profiling", flush=True)
     print("Models:", models, flush=True)
     print("Train data:", train_path, flush=True)
-    print("Test data:", test_path, flush=True)
     print("trainX.shape:", trainX.shape, flush=True)
     print("trainY.shape:", trainY.shape, flush=True)
     print("batch_size:", args.batch_size, flush=True)
@@ -605,31 +546,10 @@ def main():
         rows.append(row)
 
     csv_path = os.path.join(args.save_dir, "ns_overhead_profile.csv")
-    json_path = os.path.join(args.save_dir, "ns_overhead_profile.json")
-
     write_csv(csv_path, rows)
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "benchmark": "Navier--Stokes",
-                "train_path": train_path,
-                "test_path": test_path,
-                "batch_size": args.batch_size,
-                "warmup": args.warmup,
-                "timed_iters": args.iters,
-                "sg_mode": args.sg_mode,
-                "sg_weight": args.sg_weight,
-                "device": args.device,
-                "results": rows,
-            },
-            f,
-            indent=2,
-        )
 
     print("\nSaved outputs:", flush=True)
     print(" ", csv_path, flush=True)
-    print(" ", json_path, flush=True)
     print("=" * 80, flush=True)
 
 

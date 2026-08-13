@@ -5,5 +5,3 @@
 - `NEURALOPERATOR-MIT.txt`: MIT license for the
   [neuraloperator](https://github.com/neuraloperator/neuraloperator) FNO
   reference implementation.
-- `MAMBA-APACHE-2.0.txt`: Apache License 2.0 for the optional
-  [mamba_ssm](https://github.com/state-spaces/mamba) dependency.

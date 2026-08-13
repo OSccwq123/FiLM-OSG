@@ -1,406 +1,158 @@
+#!/usr/bin/env python3
+"""Run advection--diffusion training jobs across a list of GPUs."""
+
+from __future__ import annotations
+
+import argparse
 import os
+import subprocess
 import sys
 import time
-import argparse
-import subprocess
 from collections import deque
-from datetime import datetime
+from pathlib import Path
 
 
-DEFAULT_MODELS = [
-    "fno_film",
-    "fno",
-]
-
-TRAIN_SCRIPT = os.path.join("train", "run_convdiff_fno.py")
-LOG_DIR = "./logs_convdiff_fno"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TRAIN_SCRIPT = REPO_ROOT / "train" / "run_convdiff_fno.py"
+DEFAULT_MODELS = ("fno", "fno_film")
+DEFAULT_SEEDS = (0, 1, 2, 3, 4)
 
 
-def timestamp():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def comma_list(text, cast=str):
+    return [cast(item.strip()) for item in text.split(",") if item.strip()]
 
 
-def parse_int_list(text):
-    return [int(x.strip()) for x in text.split(",") if x.strip()]
+def training_command(args, model, seed):
+    command = [
+        sys.executable,
+        str(TRAIN_SCRIPT),
+        "--model", model,
+        "--seed", str(seed),
+        "--epochs", str(args.epochs),
+        "--batch-size", str(args.batch_size),
+        "--data-dir", args.data_dir,
+        "--save-dir", args.save_dir,
+        "--learning-rate", str(args.learning_rate),
+        "--sg-weight", str(args.sg_weight),
+        "--modes1", str(args.modes1),
+        "--modes2", str(args.modes2),
+        "--depth", str(args.depth),
+        "--width", str(args.width),
+    ]
+    if args.tag:
+        command.extend(["--tag", args.tag])
+    if args.overwrite:
+        command.append("--overwrite")
+    if args.log_lag:
+        command.append("--log-lag")
+    if args.conserve_mean:
+        command.append("--conserve-mean")
+    if args.problem_dim is not None:
+        command.extend(["--problem-dim", str(args.problem_dim)])
+    if args.hf_weight:
+        command.extend(["--hf-weight", str(args.hf_weight)])
+    if args.hf_sg_weight:
+        command.extend(["--hf-sg-weight", str(args.hf_sg_weight)])
+    if args.hf_weight or args.hf_sg_weight:
+        command.extend(["--hf-warmup-frac", str(args.hf_warmup_frac)])
+    return command
 
 
-def parse_str_list(text):
-    return [x.strip() for x in text.split(",") if x.strip()]
-
-
-def inspect_visible_gpu(gpu_id):
-    """
-    Check what PyTorch sees when CUDA_VISIBLE_DEVICES=gpu_id.
-
-    Returns:
-        (available: bool, name: str)
-    """
-    env = os.environ.copy()
-    env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-
-    code = r"""
-import torch
-print(torch.cuda.is_available())
-if torch.cuda.is_available():
-    print(torch.cuda.get_device_name(0))
-else:
-    print("NO_CUDA")
-"""
-
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=env,
-    )
-
-    if proc.returncode != 0:
-        return False, f"INSPECTION_FAILED: {proc.stderr.strip()}"
-
-    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-    if not lines:
-        return False, "NO_OUTPUT"
-
-    available = lines[0] == "True"
-    name = lines[1] if len(lines) >= 2 else "UNKNOWN"
-    return available, name
-
-
-def list_available_gpus():
-    """
-    Print PyTorch-visible CUDA devices under CUDA_DEVICE_ORDER=PCI_BUS_ID.
-    """
-    env = os.environ.copy()
-    env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-
-    code = r"""
-import torch
-print(torch.cuda.is_available())
-print(torch.cuda.device_count() if torch.cuda.is_available() else 0)
-if torch.cuda.is_available():
-    for i in range(torch.cuda.device_count()):
-        print(f"{i}\t{torch.cuda.get_device_name(i)}")
-"""
-
-    proc = subprocess.run(
-        [sys.executable, "-c", code],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=env,
-    )
-
-    print("=" * 80, flush=True)
-    print("Available CUDA devices with CUDA_DEVICE_ORDER=PCI_BUS_ID", flush=True)
-    if proc.returncode != 0:
-        print("GPU listing failed:", proc.stderr.strip(), flush=True)
-        print("=" * 80, flush=True)
-        return
-
-    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-    available = lines[0] == "True" if lines else False
-    count = int(lines[1]) if len(lines) >= 2 and lines[1].isdigit() else 0
-    print("torch.cuda.is_available =", available, flush=True)
-    print("torch.cuda.device_count =", count, flush=True)
-    for line in lines[2:]:
-        idx, name = line.split("\t", 1)
-        print(f"  --gpus id {idx}: {name}", flush=True)
-    print("=" * 80, flush=True)
-
-
-def validate_gpus(gpus, required_name=""):
-    """
-    Validate CUDA mapping before launching jobs.
-    """
-    print("=" * 80, flush=True)
-    print("Validating CUDA device mapping", flush=True)
-    print("CUDA_DEVICE_ORDER will be set to PCI_BUS_ID for all child jobs.", flush=True)
-    if required_name:
-        print(f"Required GPU name substring: {required_name}", flush=True)
-
-    valid = []
-    rejected = []
-
-    for gpu in gpus:
-        available, name = inspect_visible_gpu(gpu)
-        print(f"GPU id {gpu}: available={available}, visible_name={name}", flush=True)
-
-        if not available:
-            rejected.append((gpu, name))
-            continue
-
-        if required_name and required_name not in name:
-            rejected.append((gpu, name))
-            continue
-
-        valid.append(gpu)
-
-    if rejected:
-        print("\nRejected GPU ids:", flush=True)
-        for gpu, name in rejected:
-            print(f"  gpu={gpu}, name={name}", flush=True)
-
-    if not valid:
-        raise RuntimeError(
-            "No valid GPU remains after validation. "
-            "Check CUDA_VISIBLE_DEVICES mapping or relax --require-gpu-name."
-        )
-
-    print("Valid GPU ids:", valid, flush=True)
-    print("=" * 80, flush=True)
-    return valid
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--models", default=",".join(DEFAULT_MODELS))
+    parser.add_argument("--seeds", default=",".join(map(str, DEFAULT_SEEDS)))
+    parser.add_argument("--gpus", required=True, help="Comma-separated physical GPU ids.")
+    parser.add_argument("--data-dir", default="data")
+    parser.add_argument("--save-dir", default=".")
+    parser.add_argument("--log-dir", default="logs_convdiff_fno")
+    parser.add_argument("--tag", default="")
+    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--batch-size", type=int, default=100)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--sg-weight", type=float, default=1.0)
+    parser.add_argument("--modes1", type=int, default=12)
+    parser.add_argument("--modes2", type=int, default=12)
+    parser.add_argument("--depth", type=int, default=4)
+    parser.add_argument("--width", type=int, default=20)
+    parser.add_argument("--problem-dim", type=int, default=None)
+    parser.add_argument("--log-lag", action="store_true")
+    parser.add_argument("--conserve-mean", action="store_true")
+    parser.add_argument("--hf-weight", type=float, default=0.0)
+    parser.add_argument("--hf-sg-weight", type=float, default=0.0)
+    parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--poll-seconds", type=float, default=5.0)
+    return parser.parse_args()
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--seeds", type=str, default="")
-    parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
-    parser.add_argument("--gpus", type=str, default="")
-    parser.add_argument("--epochs", type=int, default=500)
-    parser.add_argument("--batch-size", type=int, default=100)
-    parser.add_argument("--data-dir", type=str, default=os.path.join("data"))
-    parser.add_argument("--tag", type=str, default="")
-    parser.add_argument(
-        "--log-lag",
-        action="store_true",
-        help="Pass --log-lag to AD training jobs: log10(dt) before affine normalization.",
-    )
-    parser.add_argument("--no-overwrite", action="store_true")
-    parser.add_argument("--poll-seconds", type=int, default=30)
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print planned jobs and child commands without validating GPUs or launching.",
-    )
+    args = parse_args()
+    models = comma_list(args.models)
+    seeds = comma_list(args.seeds, int)
+    gpus = comma_list(args.gpus, int)
+    if not models or not seeds or not gpus:
+        raise SystemExit("Models, seeds, and GPUs must be non-empty lists.")
 
-    parser.add_argument(
-        "--allow-non-a100",
-        action="store_true",
-        help="Deprecated no-op. Launchers no longer filter GPU model by default.",
-    )
-    parser.add_argument(
-        "--require-gpu-name",
-        type=str,
-        default="",
-        help="Optional substring filter for GPU names, for example A100 or H100.",
-    )
-    parser.add_argument(
-        "--list-gpus",
-        action="store_true",
-        help="List PyTorch-visible CUDA devices and exit.",
-    )
-
-    # Only validate and print mapping, then exit.
-    parser.add_argument(
-        "--check-gpus-only",
-        action="store_true",
-        help="Only check CUDA mapping and exit without launching jobs.",
-    )
-
-    args = parser.parse_args()
-
-    seeds = parse_int_list(args.seeds) if args.seeds else []
-    models = parse_str_list(args.models)
-    requested_gpus = parse_int_list(args.gpus) if args.gpus else []
-
-    if args.list_gpus:
-        list_available_gpus()
-        return
-
-    if not seeds:
-        raise SystemExit("Please pass one or more seeds with --seeds, for example --seeds 0,1,2.")
-
-    if not requested_gpus:
-        list_available_gpus()
-        raise SystemExit("Please pass one or more GPU ids with --gpus, for example --gpus 0,1.")
-
-    if args.dry_run:
-        print("=" * 80, flush=True)
-        print("Advection-diffusion FNO launcher dry run", flush=True)
-        print("Models:", models, flush=True)
-        print("Seeds:", seeds, flush=True)
-        print("Requested GPUs:", requested_gpus, flush=True)
-        print("Epochs:", args.epochs, flush=True)
-        print("Batch size:", args.batch_size, flush=True)
-        print("Data dir:", args.data_dir, flush=True)
-        print("Lag preprocessing:", "log10_then_affine" if args.log_lag else "affine_only", flush=True)
-        print("Tag:", args.tag if args.tag else "(none)", flush=True)
-        print("No GPU validation or jobs will be launched.", flush=True)
-        for seed in seeds:
-            for model in models:
-                cmd = [
-                    sys.executable,
-                    TRAIN_SCRIPT,
-                    "--model", model,
-                    "--seed", str(seed),
-                    "--epochs", str(args.epochs),
-                    "--batch-size", str(args.batch_size),
-                    "--data-dir", args.data_dir,
-                    "--dry-run",
-                ]
-                if args.log_lag:
-                    cmd.append("--log-lag")
-                if args.tag:
-                    cmd.extend(["--tag", args.tag])
-                if args.no_overwrite:
-                    cmd.append("--no-overwrite")
-                print("CMD:", " ".join(cmd), flush=True)
-        print("=" * 80, flush=True)
-        return
-
-    # Validate actual PyTorch-visible mapping.
-    gpus = validate_gpus(
-        requested_gpus,
-        required_name=args.require_gpu_name,
-    )
-
-    if args.check_gpus_only:
-        return
-
-    os.makedirs(LOG_DIR, exist_ok=True)
-
-    jobs = deque()
-    for seed in seeds:
-        for model in models:
-            jobs.append((model, seed))
-
+    jobs = deque((model, seed) for seed in seeds for model in models)
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
     running = {}
-    failed = []
+    failures = []
 
-    print("=" * 80, flush=True)
-    print("Convection--diffusion FNO launcher", flush=True)
-    print("Models:", models, flush=True)
-    print("Seeds:", seeds, flush=True)
-    print("Requested GPUs:", requested_gpus, flush=True)
-    print("Validated GPUs:", gpus, flush=True)
-    print("Epochs:", args.epochs, flush=True)
-    print("Batch size:", args.batch_size, flush=True)
-    print("Data dir:", args.data_dir, flush=True)
-    print("Lag preprocessing:", "log10_then_affine" if args.log_lag else "affine_only", flush=True)
-    print("Tag:", args.tag if args.tag else "(none)", flush=True)
-    print("Total jobs:", len(jobs), flush=True)
-    print("=" * 80, flush=True)
+    print(
+        f"Launching {len(jobs)} advection--diffusion jobs: models={models}, "
+        f"seeds={seeds}, GPUs={gpus}"
+    )
 
     while jobs or running:
-        # Start jobs on free GPUs.
         for gpu in gpus:
-            if gpu in running:
+            if gpu in running or not jobs:
                 continue
-            if not jobs:
-                break
 
             model, seed = jobs.popleft()
-
-            tag_part = f"_{args.tag}" if args.tag else ""
-            log_path = os.path.join(
-                LOG_DIR,
-                f"convdiff_{model}_seed{seed}{tag_part}_gpu{gpu}.log",
-            )
-            log_file = open(log_path, "w", buffering=1)
-
+            tag = f"_{args.tag}" if args.tag else ""
+            log_path = log_dir / f"convdiff_{model}_seed{seed}{tag}_gpu{gpu}.log"
+            log_file = log_path.open("w", buffering=1)
             env = os.environ.copy()
-
-            # Critical for matching nvidia-smi physical GPU ids.
             env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
             env["CUDA_VISIBLE_DEVICES"] = str(gpu)
 
-            # Avoid CPU oversubscription.
-            env["OMP_NUM_THREADS"] = "1"
-            env["MKL_NUM_THREADS"] = "1"
-            env["OPENBLAS_NUM_THREADS"] = "1"
-            env["NUMEXPR_NUM_THREADS"] = "1"
-
-            cmd = [
-                sys.executable,
-                TRAIN_SCRIPT,
-                "--model", model,
-                "--seed", str(seed),
-                "--epochs", str(args.epochs),
-                "--batch-size", str(args.batch_size),
-                "--data-dir", args.data_dir,
-            ]
-
-            if args.log_lag:
-                cmd.append("--log-lag")
-
-            if args.tag:
-                cmd.extend(["--tag", args.tag])
-
-            if args.no_overwrite:
-                cmd.append("--no-overwrite")
-
-            print(f"[{timestamp()}] START gpu={gpu}: {model}, seed={seed}", flush=True)
-            print("  log:", log_path, flush=True)
-            print("  CUDA_DEVICE_ORDER=PCI_BUS_ID", flush=True)
-            print(f"  CUDA_VISIBLE_DEVICES={gpu}", flush=True)
-
-            proc = subprocess.Popen(
-                cmd,
+            process = subprocess.Popen(
+                training_command(args, model, seed),
+                cwd=REPO_ROOT,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 env=env,
             )
-
-            running[gpu] = {
-                "proc": proc,
-                "log_file": log_file,
-                "log_path": log_path,
-                "model": model,
-                "seed": seed,
-                "start": time.time(),
-            }
-
-        time.sleep(args.poll_seconds)
-
-        # Check finished jobs.
-        for gpu, info in list(running.items()):
-            proc = info["proc"]
-            ret = proc.poll()
-
-            if ret is None:
-                continue
-
-            elapsed = time.time() - info["start"]
-            info["log_file"].close()
-
-            model = info["model"]
-            seed = info["seed"]
-
-            if ret == 0:
-                print(
-                    f"[{timestamp()}] DONE  gpu={gpu}: {model}, seed={seed}, "
-                    f"elapsed={elapsed / 60:.1f} min",
-                    flush=True,
-                )
-            else:
-                print(
-                    f"[{timestamp()}] FAIL  gpu={gpu}: {model}, seed={seed}, "
-                    f"returncode={ret}, elapsed={elapsed / 60:.1f} min",
-                    flush=True,
-                )
-                print("  see log:", info["log_path"], flush=True)
-                failed.append((model, seed, gpu, ret, info["log_path"]))
-
-            del running[gpu]
+            running[gpu] = (process, log_file, log_path, model, seed, time.time())
+            print(f"GPU {gpu}: started {model}, seed {seed} ({log_path})")
 
         if running:
-            active = ", ".join(
-                f"GPU {gpu}: {info['model']}/seed{info['seed']}"
-                for gpu, info in running.items()
-            )
-            print(f"[{timestamp()}] ACTIVE {active}", flush=True)
+            time.sleep(args.poll_seconds)
 
-    print("=" * 80, flush=True)
-    if failed:
-        print("Some jobs failed:", flush=True)
-        for item in failed:
-            print(item, flush=True)
-        sys.exit(1)
+        for gpu, job in list(running.items()):
+            process, log_file, log_path, model, seed, start = job
+            returncode = process.poll()
+            if returncode is None:
+                continue
 
-    print("All jobs finished successfully.", flush=True)
-    print("=" * 80, flush=True)
+            log_file.close()
+            elapsed = (time.time() - start) / 60.0
+            if returncode == 0:
+                print(f"GPU {gpu}: finished {model}, seed {seed} in {elapsed:.1f} min")
+            else:
+                failures.append((model, seed, returncode, log_path))
+                print(f"GPU {gpu}: {model}, seed {seed} failed; see {log_path}")
+            del running[gpu]
+
+    if failures:
+        print("\nFailed jobs:")
+        for model, seed, returncode, log_path in failures:
+            print(f"  {model}, seed {seed}, exit {returncode}: {log_path}")
+        raise SystemExit(1)
+
+    print("All advection--diffusion jobs finished successfully.")
 
 
 if __name__ == "__main__":

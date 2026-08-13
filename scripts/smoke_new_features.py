@@ -7,9 +7,22 @@ import tempfile
 import sys
 from pathlib import Path
 
+import numpy as np
+import torch
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from film_osg.models.pde_osg import PDE_osg
+from film_osg.networks.fno import (
+    gl_osg_fno1d,
+    gl_osg_fno1d_with_film,
+    osg_fno1d,
+    osg_fno1d_with_film,
+    osg_fno2d,
+    osg_fno2d_with_film,
+)
 
 
 def cfg1(save_path, conserve_mean=False, hf=True, gl_film_mode="global_only"):
@@ -107,7 +120,7 @@ def pde_hf_smoke(name, model, cfg, spatial_shape):
         H, W = spatial_shape
         train_x = np.random.randn(n, H, W, 2).astype("float32")
         train_y = np.random.randn(n, H, W, 1).astype("float32")
-    wrapper = PDE_osg(train_x, train_y, None, model, cfg)
+    wrapper = PDE_osg(train_x, train_y, model, cfg)
     xx = torch.from_numpy(train_x)
     yy = torch.from_numpy(train_y)
     pred = wrapper.mynet(xx)
@@ -126,22 +139,6 @@ def main():
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--json-out", default="logs/smoke_new_features.json")
     args = parser.parse_args()
-    global np, torch, PDE_osg
-    global gl_osg_fno1d, gl_osg_fno1d_with_film, gl_osg_fno2d, gl_osg_fno2d_with_film
-    global osg_fno1d, osg_fno1d_with_film, osg_fno2d, osg_fno2d_with_film
-    import numpy as np
-    import torch
-    from film_osg.models.pde_osg import PDE_osg
-    from film_osg.networks.fno import (
-        gl_osg_fno1d,
-        gl_osg_fno1d_with_film,
-        gl_osg_fno2d,
-        gl_osg_fno2d_with_film,
-        osg_fno1d,
-        osg_fno1d_with_film,
-        osg_fno2d,
-        osg_fno2d_with_film,
-    )
     torch.manual_seed(0)
     np.random.seed(0)
 
@@ -166,9 +163,6 @@ def main():
         ("gl_film1d_branchwise", gl_osg_fno1d_with_film(vmin, vmax, tmin, tmax, cfg1(tmp/"e", True, gl_film_mode="branchwise")), x1, y1),
         ("fno2d_projection", osg_fno2d(vmin, vmax, tmin, tmax, cfg2(tmp/"f", True)), x2, y2),
         ("film2d_projection", osg_fno2d_with_film(vmin, vmax, tmin, tmax, cfg2(tmp/"g", True)), x2, y2),
-        ("gl_fno2d_projection", gl_osg_fno2d(vmin, vmax, tmin, tmax, cfg2(tmp/"h", True)), x2, y2),
-        ("gl_film2d_global_only", gl_osg_fno2d_with_film(vmin, vmax, tmin, tmax, cfg2(tmp/"i", True, gl_film_mode="global_only")), x2, y2),
-        ("gl_film2d_branchwise", gl_osg_fno2d_with_film(vmin, vmax, tmin, tmax, cfg2(tmp/"j", True, gl_film_mode="branchwise")), x2, y2),
     ]
     for name, model, x, y in specs:
         results[name] = assert_forward_backward(name, model, x, y, None)
@@ -178,7 +172,12 @@ def main():
 
     results["pde_hf_1d"] = pde_hf_smoke("pde_hf_1d", gl_osg_fno1d_with_film(vmin, vmax, tmin, tmax, cfg1(tmp/"k", True)), cfg1(tmp/"k", True), (16,))
     print("PASS pde_hf_1d", results["pde_hf_1d"], flush=True)
-    results["pde_hf_2d"] = pde_hf_smoke("pde_hf_2d", gl_osg_fno2d_with_film(vmin, vmax, tmin, tmax, cfg2(tmp/"l", True)), cfg2(tmp/"l", True), (8, 8))
+    results["pde_hf_2d"] = pde_hf_smoke(
+        "pde_hf_2d",
+        osg_fno2d_with_film(vmin, vmax, tmin, tmax, cfg2(tmp/"l", True)),
+        cfg2(tmp/"l", True),
+        (8, 8),
+    )
     print("PASS pde_hf_2d", results["pde_hf_2d"], flush=True)
 
     out = Path(args.json_out)

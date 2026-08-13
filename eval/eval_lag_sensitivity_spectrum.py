@@ -229,8 +229,8 @@ def main():
     parser = argparse.ArgumentParser(description="Layerwise lag-sensitivity spectrum diagnostic")
     parser.add_argument("--benchmark", default="original_burgers")
     parser.add_argument("--model-seed", type=int, default=0)
-    parser.add_argument("--direct-model", default="runs_burgers_fno_seed0_burgers_seed01234_final1000/model")
-    parser.add_argument("--film-model", default="runs_burgers_fno_film_seed0_burgers_seed01234_final1000_rerun_seed0/model")
+    parser.add_argument("--direct-model", type=Path, required=True)
+    parser.add_argument("--film-model", type=Path, required=True)
     parser.add_argument("--data", default="data/BurgersOSG_test.mat")
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--sample-seed", type=int, default=20260620)
@@ -244,8 +244,8 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    direct = safe_torch_load(Path(args.direct_model), device).to(device)
-    film = safe_torch_load(Path(args.film_model), device).to(device)
+    direct = safe_torch_load(args.direct_model, device).to(device)
+    film = safe_torch_load(args.film_model, device).to(device)
     data = loadmat(args.data)
 
     states_np, delta_np, dt_np = sample_pairs(data, direct, args.samples, args.sample_seed, args.fd_eps)
@@ -278,8 +278,8 @@ def main():
     metadata = {
         "benchmark": args.benchmark,
         "model_seed": args.model_seed,
-        "direct_checkpoint": str(Path(args.direct_model)),
-        "film_checkpoint": str(Path(args.film_model)),
+        "direct_checkpoint": str(args.direct_model),
+        "film_checkpoint": str(args.film_model),
         "data_path": str(Path(args.data)),
         "sample_count": args.samples,
         "sample_seed": args.sample_seed,
@@ -334,28 +334,13 @@ def main():
     handles, legend_labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, legend_labels, loc="upper center", bbox_to_anchor=(0.5, 1.04), ncol=3, frameon=False)
     benchmark_title = args.benchmark.replace("_", " ").title()
-    fig.suptitle(f"{benchmark_title}: layerwise lag-sensitivity spectra (seed 0)", y=1.13)
+    fig.suptitle(
+        f"{benchmark_title}: layerwise lag-sensitivity spectra (seed {args.model_seed})",
+        y=1.13,
+    )
     fig.tight_layout()
     fig.savefig(out_dir / "lag_sensitivity_layerwise.pdf", bbox_inches="tight")
     fig.savefig(out_dir / "lag_sensitivity_layerwise.png", dpi=220, bbox_inches="tight")
-    plt.close(fig)
-
-    # Keep a decoder-only filename for compatibility with the first pilot.
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
-    stage = "decoder"
-    for label, color in zip(labels, colors):
-        energy = np.asarray(outputs[stage][label]["normalized_energy"])
-        ax.semilogy(np.arange(len(energy)), np.maximum(energy, 1e-12), marker="o", ms=3, lw=1.8, label=label, color=color)
-    modes = int(outputs[stage][labels[0]]["retained_end_exclusive"])
-    ax.axvspan(-0.5, modes - 0.5, color="#D9E6F2", alpha=0.35, label="retained band")
-    ax.set_xlabel("Wavenumber $k$")
-    ax.set_ylabel("Normalized lag-sensitivity energy")
-    ax.set_title(f"{benchmark_title}: decoder lag-sensitivity spectrum (seed 0)")
-    ax.grid(True, which="both", alpha=0.25)
-    ax.legend(frameon=False, fontsize=8)
-    fig.tight_layout()
-    fig.savefig(out_dir / "lag_sensitivity_spectrum.pdf", bbox_inches="tight")
-    fig.savefig(out_dir / "lag_sensitivity_spectrum.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
     print(json.dumps(metadata, indent=2), flush=True)

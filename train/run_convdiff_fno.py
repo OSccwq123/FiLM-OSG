@@ -2,6 +2,7 @@ import os
 import shutil
 import random
 import argparse
+import json
 import sys
 from pathlib import Path
 import numpy as np
@@ -16,12 +17,12 @@ DEFAULT_DATA_DIR = REPO_ROOT / "data"
 TRAIN_FILE = "train_data.mat"
 TEST_FILE = "test_data.mat"
 
-MODEL_CHOICES = ["fno", "fno_film", "gl_fno", "gl_fno_film", "vt_fno", "vt_fno_film"]
+MODEL_CHOICES = ["fno", "fno_film", "vt_fno", "vt_fno_film"]
 
 
 def resolve_data_paths(data_dir: str | os.PathLike[str]):
     data_root = Path(data_dir)
-    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
+    return data_root / TRAIN_FILE, data_root / TEST_FILE
 
 
 def set_seed(seed: int):
@@ -52,7 +53,6 @@ def make_config(
     hf_sg_weight: float = 0.0,
     hf_warmup_frac: float = 0.1,
     conserve_mean: bool = False,
-    gl_film_mode: str = "global_only",
     log_lag: bool = False,
     learning_rate: float = 1e-3,
     sg_weight: float = 1.0,
@@ -91,16 +91,12 @@ def make_config(
         "depth": depth,
         "width": width,
 
-        "local_kernel_size": 3,
-        "local_pool_factor": 2,
-        "gl_layer_scale": 1e-3,
         "hf_weight": hf_weight,
         "hf_sg_weight": hf_sg_weight,
         "hf_warmup_frac": hf_warmup_frac,
         "hf_band_frac": 1.0 / 3.0,
         "hf_power": 2.0,
         "conserve_mean": conserve_mean,
-        "gl_film_mode": gl_film_mode,
 
         "save_path": save_path,
     }
@@ -108,15 +104,11 @@ def make_config(
 
 def build_model(model_name, vmin, vmax, tmin, tmax, config):
     from film_osg.networks.fno import (
-        gl_osg_fno2d,
-        gl_osg_fno2d_with_film,
         osg_fno2d,
         osg_fno2d_with_film,
         vt_fno2d,
         vt_fno2d_with_film,
     )
-
-    print("network_import_source = film_osg", flush=True)
 
     if model_name == "vt_fno":
         return vt_fno2d(
@@ -156,11 +148,6 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
             config=config,
             multiscale=config["multiscale"],
         )
-    if model_name == "gl_fno":
-        return gl_osg_fno2d(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
-    if model_name == "gl_fno_film":
-        return gl_osg_fno2d_with_film(vmin=vmin, vmax=vmax, tmin=tmin, tmax=tmax, config=config, multiscale=config["multiscale"])
-
     raise ValueError(f"Unknown model_name: {model_name}")
 
 
@@ -170,17 +157,15 @@ def train_one(
     epochs: int = 500,
     batch_size: int = 100,
     tag: str = "",
-    overwrite: bool = True,
+    overwrite: bool = False,
     save_dir: str = ".",
     device: str | None = None,
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
     log_lag: bool = False,
-    dry_run: bool = False,
     hf_weight: float = 0.0,
     hf_sg_weight: float = 0.0,
     hf_warmup_frac: float = 0.1,
     conserve_mean: bool = False,
-    gl_film_mode: str = "global_only",
     learning_rate: float = 1e-3,
     sg_weight: float = 1.0,
     modes1: int = 12,
@@ -190,11 +175,11 @@ def train_one(
     problem_dim: int | None = None,
 ):
     suffix = f"_{tag}" if tag else ""
-    save_path = os.path.join(save_dir, f"runs_convdiff_{model_name}_seed{seed}{suffix}")
-    train_path, test_path = resolve_data_paths(data_dir)
+    save_path = Path(save_dir) / f"runs_convdiff_{model_name}_seed{seed}{suffix}"
+    train_path, _ = resolve_data_paths(data_dir)
 
     config = make_config(
-        save_path=save_path,
+        save_path=str(save_path),
         seed=seed,
         epochs=epochs,
         batch_size=batch_size,
@@ -203,7 +188,6 @@ def train_one(
         hf_sg_weight=hf_sg_weight,
         hf_warmup_frac=hf_warmup_frac,
         conserve_mean=conserve_mean,
-        gl_film_mode=gl_film_mode,
         log_lag=log_lag,
         learning_rate=learning_rate,
         sg_weight=sg_weight,
@@ -211,7 +195,7 @@ def train_one(
         modes2=modes2,
         depth=depth,
         width=width,
-        problem_dim=problem_dim or 1,
+        problem_dim=problem_dim if problem_dim is not None else 1,
     )
 
     if model_name in {"vt_fno", "vt_fno_film"}:
@@ -221,32 +205,22 @@ def train_one(
         config["hf_sg_weight"] = 0.0
         config["conserve_mean"] = False
 
-    if dry_run:
-        print("Advection-diffusion FNO training dry run", flush=True)
-        print("model =", model_name, flush=True)
-        print("seed =", seed, flush=True)
-        print("train_path =", train_path, flush=True)
-        print("test_path =", test_path, flush=True)
-        print("save_path =", save_path, flush=True)
-        print("lag_preprocessing =", "log10_then_affine" if log_lag else "affine_only", flush=True)
-        print("config =", config, flush=True)
-        print("No data loading, directory writes, or training were run.", flush=True)
-        return
-
     from film_osg.datasets.pde import pde_dataset_osg
     from film_osg.models.pde_osg import PDE_osg
 
-    print("dataset_solver_import_source = film_osg", flush=True)
-
     set_seed(seed)
 
-    if overwrite:
-        shutil.rmtree(save_path, ignore_errors=True)
-    os.makedirs(save_path, exist_ok=True)
+    if not train_path.is_file():
+        raise FileNotFoundError(f"Training data not found: {train_path}")
+    if save_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"Output directory already exists: {save_path}. "
+            "Pass --overwrite to replace it."
+        )
 
     dataset = pde_dataset_osg(config)
-    trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
-        train_path, test_path
+    trainX, trainY, _, _, vmin, vmax, tmin, tmax, _, _ = dataset.load(
+        str(train_path), None
     )
     inferred_problem_dim = int(trainY.shape[-1])
     if problem_dim is not None and int(problem_dim) != inferred_problem_dim:
@@ -256,46 +230,21 @@ def train_one(
         )
     config["problem_dim"] = inferred_problem_dim
 
-    print("============================================================", flush=True)
-    print(f"Model: {model_name}, seed={seed}", flush=True)
-    print("save_path =", save_path, flush=True)
-    print("coords.shape =", coords.shape, flush=True)
-    print("trainX.shape =", trainX.shape, flush=True)
-    print("trainY.shape =", trainY.shape, flush=True)
-    print("config =", {
-        "epochs": config["epochs"],
-        "batch_size": config["batch_size"],
-        "learning_rate": config["learning_rate"],
-        "optimizer": config["optimizer"],
-        "scheduler": config["scheduler"],
-        "loss": config["loss"],
-        "multiscale": config["multiscale"],
-        "sg_pairing": config["sg_pairing"],
-        "sg_weight": config["sg_weight"],
-        "modes1": config["modes1"],
-        "modes2": config["modes2"],
-        "depth": config["depth"],
-        "width": config["width"],
-        "problem_dim": config["problem_dim"],
-        "hf_weight": config["hf_weight"],
-        "hf_sg_weight": config["hf_sg_weight"],
-        "hf_warmup_frac": config["hf_warmup_frac"],
-        "conserve_mean": config["conserve_mean"],
-        "gl_film_mode": config["gl_film_mode"],
-    }, flush=True)
-    print("CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES"), flush=True)
-    print("torch.cuda.is_available =", torch.cuda.is_available(), flush=True)
-    if torch.cuda.is_available():
-        print("torch.cuda.current_device =", torch.cuda.current_device(), flush=True)
-        print("torch.cuda.get_device_name =", torch.cuda.get_device_name(0), flush=True)
-    print("============================================================", flush=True)
+    if save_path.exists():
+        shutil.rmtree(save_path)
+    save_path.mkdir(parents=True)
+    with (save_path / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump({"model": model_name, **config}, handle, indent=2)
+
+    print(f"Training {model_name} with seed {seed} on {config['device']}", flush=True)
+    print(f"Data: {train_path}", flush=True)
+    print(f"Output: {save_path}", flush=True)
 
     net = build_model(model_name, vmin, vmax, tmin, tmax, config)
 
     solver = PDE_osg(
         trainX,
         trainY,
-        osg_data=None,
         network=net,
         config=config,
     )
@@ -321,13 +270,15 @@ def main():
         action="store_true",
         help="Use log10(dt) before affine lag normalization for this AD run.",
     )
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--no-overwrite", action="store_true")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing output directory for this model and seed.",
+    )
     parser.add_argument("--hf-weight", type=float, default=0.0)
     parser.add_argument("--hf-sg-weight", type=float, default=0.0)
     parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
     parser.add_argument("--conserve-mean", action="store_true")
-    parser.add_argument("--gl-film-mode", type=str, default="global_only", choices=["branchwise", "global_only"])
     parser.add_argument("--learning-rate", type=float, default=1e-3)
     parser.add_argument("--sg-weight", type=float, default=1.0)
     parser.add_argument("--modes1", type=int, default=12)
@@ -348,17 +299,15 @@ def main():
         epochs=args.epochs,
         batch_size=args.batch_size,
         tag=args.tag,
-        overwrite=not args.no_overwrite,
+        overwrite=args.overwrite,
         save_dir=args.save_dir,
         device=args.device,
         data_dir=args.data_dir,
         log_lag=args.log_lag,
-        dry_run=args.dry_run,
         hf_weight=args.hf_weight,
         hf_sg_weight=args.hf_sg_weight,
         hf_warmup_frac=args.hf_warmup_frac,
         conserve_mean=args.conserve_mean,
-        gl_film_mode=args.gl_film_mode,
         learning_rate=args.learning_rate,
         sg_weight=args.sg_weight,
         modes1=args.modes1,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Navier--Stokes U-NO-style and Transolver-style jobs across GPUs."""
+"""Run Navier--Stokes FNO training jobs across a list of GPUs."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TRAIN_SCRIPT = REPO_ROOT / "train" / "train_ns_extra_backbones.py"
-DEFAULT_MODELS = ("uno", "uno_film", "transolver", "transolver_film")
-DEFAULT_SEEDS = (0, 1, 2)
+TRAIN_SCRIPT = REPO_ROOT / "train" / "train_ns_one.py"
+DEFAULT_MODELS = ("fno", "fno_film")
+DEFAULT_SEEDS = (0, 1, 2, 3, 4)
 
 
 def comma_list(text, cast=str):
@@ -30,13 +30,26 @@ def training_command(args, model, seed):
         "--seed", str(seed),
         "--epochs", str(args.epochs),
         "--batch-size", str(args.batch_size),
+        "--learning-rate", str(args.learning_rate),
         "--data-dir", args.data_dir,
         "--save-dir", args.save_dir,
+        "--modes1", str(args.modes1),
+        "--modes2", str(args.modes2),
+        "--depth", str(args.depth),
+        "--width", str(args.width),
     ]
     if args.tag:
         command.extend(["--tag", args.tag])
     if args.overwrite:
         command.append("--overwrite")
+    if args.conserve_mean:
+        command.append("--conserve-mean")
+    if args.hf_weight:
+        command.extend(["--hf-weight", str(args.hf_weight)])
+    if args.hf_sg_weight:
+        command.extend(["--hf-sg-weight", str(args.hf_sg_weight)])
+    if args.hf_weight or args.hf_sg_weight:
+        command.extend(["--hf-warmup-frac", str(args.hf_warmup_frac)])
     return command
 
 
@@ -47,10 +60,19 @@ def parse_args():
     parser.add_argument("--gpus", required=True, help="Comma-separated physical GPU ids.")
     parser.add_argument("--data-dir", default="data")
     parser.add_argument("--save-dir", default=".")
-    parser.add_argument("--log-dir", default="logs_ns_extra_backbones")
+    parser.add_argument("--log-dir", default="logs_ns_fno")
     parser.add_argument("--tag", default="")
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=20)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--modes1", type=int, default=12)
+    parser.add_argument("--modes2", type=int, default=12)
+    parser.add_argument("--depth", type=int, default=4)
+    parser.add_argument("--width", type=int, default=20)
+    parser.add_argument("--conserve-mean", action="store_true")
+    parser.add_argument("--hf-weight", type=float, default=0.0)
+    parser.add_argument("--hf-sg-weight", type=float, default=0.0)
+    parser.add_argument("--hf-warmup-frac", type=float, default=0.1)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--poll-seconds", type=float, default=5.0)
     return parser.parse_args()
@@ -69,11 +91,11 @@ def main():
     log_dir.mkdir(parents=True, exist_ok=True)
     running = {}
     failures = []
+
     print(
-        f"Launching {len(jobs)} extra-backbone jobs: models={models}, "
+        f"Launching {len(jobs)} Navier--Stokes jobs: models={models}, "
         f"seeds={seeds}, GPUs={gpus}"
     )
-
     while jobs or running:
         for gpu in gpus:
             if gpu in running or not jobs:
@@ -116,7 +138,7 @@ def main():
         for model, seed, returncode, log_path in failures:
             print(f"  {model}, seed {seed}, exit {returncode}: {log_path}")
         raise SystemExit(1)
-    print("All extra-backbone jobs finished successfully.")
+    print("All Navier--Stokes jobs finished successfully.")
 
 
 if __name__ == "__main__":

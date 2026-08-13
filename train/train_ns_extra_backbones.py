@@ -2,6 +2,7 @@ import os
 import shutil
 import random
 import argparse
+import json
 import sys
 from pathlib import Path
 import numpy as np
@@ -20,8 +21,6 @@ TEST_FILE = "VorticityOSG_test.mat"
 MODEL_CHOICES = [
     "uno",
     "uno_film",
-    "mambano",
-    "mambano_film",
     "transolver",
     "transolver_film",
 ]
@@ -29,7 +28,7 @@ MODEL_CHOICES = [
 
 def resolve_data_paths(data_dir: str | os.PathLike[str]):
     data_root = Path(data_dir)
-    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
+    return data_root / TRAIN_FILE, data_root / TEST_FILE
 
 
 def set_seed(seed: int):
@@ -57,12 +56,6 @@ def make_config(
     batch_size: int = 20,
     device: str | None = None,
 ):
-    """
-    NS configuration for OSG-compatible extra backbones.
-
-    The main shared settings are kept aligned with the current FNO NS setting.
-    Extra keys are harmless for models that do not use them.
-    """
     return {
         "problem_type": "2d_regular",
         "problem_dim": 1,
@@ -87,27 +80,18 @@ def make_config(
 
         "activation": "gelu",
 
-        # Shared width/depth.
         "depth": 4,
         "width": 20,
 
-        # U-NO / spectral-style settings.
         "modes1": 8,
         "modes2": 8,
         "uno_norm": False,
 
-        # Transolver-style settings.
         "n_head": 2,
         "slice_num": 32,
         "dropout": 0.0,
         "mlp_ratio": 4,
 
-        # MambaNO-style settings.
-        "mamba_d_state": 16,
-        "mamba_d_conv": 4,
-        "mamba_expand": 2,
-
-        # FiLM time encoder width.
         "time_width": 20,
 
         "save_path": save_path,
@@ -118,13 +102,9 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
     from film_osg.networks.osg_extra_backbones import (
         osg_uno2d,
         osg_uno2d_with_film,
-        osg_mambano2d,
-        osg_mambano2d_with_film,
         osg_transolver2d,
         osg_transolver2d_with_film,
     )
-
-    print("network_import_source = film_osg", flush=True)
 
     if model_name == "uno":
         return osg_uno2d(
@@ -138,26 +118,6 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
 
     if model_name == "uno_film":
         return osg_uno2d_with_film(
-            vmin=vmin,
-            vmax=vmax,
-            tmin=tmin,
-            tmax=tmax,
-            config=config,
-            multiscale=config["multiscale"],
-        )
-
-    if model_name == "mambano":
-        return osg_mambano2d(
-            vmin=vmin,
-            vmax=vmax,
-            tmin=tmin,
-            tmax=tmax,
-            config=config,
-            multiscale=config["multiscale"],
-        )
-
-    if model_name == "mambano_film":
-        return osg_mambano2d_with_film(
             vmin=vmin,
             vmax=vmax,
             tmin=tmin,
@@ -195,89 +155,56 @@ def train_one(
     epochs: int = 500,
     batch_size: int = 20,
     tag: str = "",
-    overwrite: bool = True,
+    overwrite: bool = False,
     save_dir: str = ".",
     device: str | None = None,
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
-    dry_run: bool = False,
 ):
     suffix = f"_{tag}" if tag else ""
-    save_path = os.path.join(save_dir, f"runs_ns_{model_name}_seed{seed}{suffix}")
-    train_path, test_path = resolve_data_paths(data_dir)
+    save_path = Path(save_dir) / f"runs_ns_{model_name}_seed{seed}{suffix}"
+    train_path, _ = resolve_data_paths(data_dir)
 
     config = make_config(
-        save_path=save_path,
+        save_path=str(save_path),
         seed=seed,
         epochs=epochs,
         batch_size=batch_size,
         device=device,
     )
 
-    if dry_run:
-        print("Navier-Stokes extra-backbone training dry run", flush=True)
-        print("model =", model_name, flush=True)
-        print("seed =", seed, flush=True)
-        print("train_path =", train_path, flush=True)
-        print("test_path =", test_path, flush=True)
-        print("save_path =", save_path, flush=True)
-        print("config =", config, flush=True)
-        print("No data loading, directory writes, or training were run.", flush=True)
-        return
-
     from film_osg.datasets.pde import pde_dataset_osg
     from film_osg.models.pde_osg import PDE_osg
 
-    print("dataset_solver_import_source = film_osg", flush=True)
-
     set_seed(seed)
 
-    if overwrite:
-        shutil.rmtree(save_path, ignore_errors=True)
-    os.makedirs(save_path, exist_ok=True)
+    if not train_path.is_file():
+        raise FileNotFoundError(f"Training data not found: {train_path}")
+    if save_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"Output directory already exists: {save_path}. "
+            "Pass --overwrite to replace it."
+        )
 
     dataset = pde_dataset_osg(config)
-    trainX, trainY, coords, data_test, dt_test, vmin, vmax, tmin, tmax, cmin, cmax = dataset.load(
-        train_path, test_path
+    trainX, trainY, _, _, vmin, vmax, tmin, tmax, _, _ = dataset.load(
+        str(train_path), None
     )
 
-    print("============================================================", flush=True)
-    print(f"Model: {model_name}, seed={seed}", flush=True)
-    print("save_path =", save_path, flush=True)
-    print("coords.shape =", coords.shape, flush=True)
-    print("trainX.shape =", trainX.shape, flush=True)
-    print("trainY.shape =", trainY.shape, flush=True)
-    print("config =", {
-        "epochs": config["epochs"],
-        "batch_size": config["batch_size"],
-        "learning_rate": config["learning_rate"],
-        "optimizer": config["optimizer"],
-        "scheduler": config["scheduler"],
-        "loss": config["loss"],
-        "sg_pairing": config["sg_pairing"],
-        "sg_weight": config["sg_weight"],
-        "modes1": config["modes1"],
-        "modes2": config["modes2"],
-        "depth": config["depth"],
-        "width": config["width"],
-        "n_head": config["n_head"],
-        "slice_num": config["slice_num"],
-        "mamba_d_state": config["mamba_d_state"],
-        "mamba_d_conv": config["mamba_d_conv"],
-        "mamba_expand": config["mamba_expand"],
-    }, flush=True)
-    print("CUDA_VISIBLE_DEVICES =", os.environ.get("CUDA_VISIBLE_DEVICES"), flush=True)
-    print("torch.cuda.is_available =", torch.cuda.is_available(), flush=True)
-    if torch.cuda.is_available():
-        print("torch.cuda.current_device =", torch.cuda.current_device(), flush=True)
-        print("torch.cuda.get_device_name =", torch.cuda.get_device_name(0), flush=True)
-    print("============================================================", flush=True)
+    if save_path.exists():
+        shutil.rmtree(save_path)
+    save_path.mkdir(parents=True)
+    with (save_path / "config.json").open("w", encoding="utf-8") as handle:
+        json.dump({"model": model_name, **config}, handle, indent=2)
+
+    print(f"Training {model_name} with seed {seed} on {config['device']}", flush=True)
+    print(f"Data: {train_path}", flush=True)
+    print(f"Output: {save_path}", flush=True)
 
     net = build_model(model_name, vmin, vmax, tmin, tmax, config)
 
     solver = PDE_osg(
         trainX,
         trainY,
-        osg_data=None,
         network=net,
         config=config,
     )
@@ -298,8 +225,11 @@ def main():
     parser.add_argument("--save-dir", type=str, default=".")
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--no-overwrite", action="store_true")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing output directory for this model and seed.",
+    )
     args = parser.parse_args()
 
     train_one(
@@ -308,11 +238,10 @@ def main():
         epochs=args.epochs,
         batch_size=args.batch_size,
         tag=args.tag,
-        overwrite=not args.no_overwrite,
+        overwrite=args.overwrite,
         save_dir=args.save_dir,
         device=args.device,
         data_dir=args.data_dir,
-        dry_run=args.dry_run,
     )
 
 

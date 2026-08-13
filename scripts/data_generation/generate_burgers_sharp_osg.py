@@ -164,8 +164,6 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--cfl", type=float, default=0.5)
 
-    ap.add_argument("--dry-run", action="store_true")
-
     return ap.parse_args()
 
 
@@ -198,9 +196,6 @@ def main() -> None:
     print(vars(args))
     print("Equation: inviscid Burgers, nu = 0")
     print("Output filenames: BurgersSharpOSG_train.mat, BurgersSharpOSG_test.mat")
-
-    if args.dry_run:
-        return
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)

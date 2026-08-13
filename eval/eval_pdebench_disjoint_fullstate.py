@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import sys
 from pathlib import Path
 
@@ -17,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from eval.diagnostics import combined_metrics
+from eval.diagnostics import band_error_metrics, spectrum_error_metrics
 from eval.eval_convdiff_fno import compute_metrics, model_path_for, safe_torch_load
 
 
@@ -50,16 +49,14 @@ def evaluate(model_path, test_data, device, batch_size):
     if not np.isfinite(pred).all():
         raise FloatingPointError("Prediction contains NaN or Inf values.")
 
-    metrics = compute_metrics(pred, truth)
-    metrics.update(combined_metrics(pred, truth, include_1d_local=False))
-    channels = truth.shape[-2]
-    for channel in range(channels):
-        pred_channel = pred[..., channel : channel + 1, :]
-        truth_channel = truth[..., channel : channel + 1, :]
-        channel_metrics = compute_metrics(pred_channel, truth_channel)
-        channel_metrics.update(combined_metrics(pred_channel, truth_channel, include_1d_local=False))
-        for key in ("MAE", "Mean Rel-L2", "Final Rel-L2", "HF Rel-L2", "Spectrum Error"):
-            metrics[f"Channel {channel} {key}"] = channel_metrics[key]
+    base = compute_metrics(pred, truth)
+    bands = band_error_metrics(pred, truth)
+    spectrum = spectrum_error_metrics(pred, truth)
+    metrics = {
+        "Mean Rel-L2": base["Mean Rel-L2"],
+        "HF Rel-L2": bands["HF Rel-L2"],
+        "Spectrum Error": spectrum["Spectrum Error"],
+    }
 
     del model, pred
     if torch.cuda.is_available():
@@ -85,14 +82,11 @@ def summarize(seedwise: list[dict], models: list[str], metric_keys: list[str]):
     rows = []
     for model in models:
         selected = [row for row in seedwise if row["model"] == model]
-        row = {"model": model, "num_seeds": len(selected), "seeds": json.dumps([r["seed"] for r in selected])}
+        row = {"model": model, "num_seeds": len(selected), "seeds": ",".join(str(r["seed"]) for r in selected)}
         for metric in metric_keys:
             values = np.asarray([float(item[metric]) for item in selected], dtype=np.float64)
             row[f"{metric} mean"] = float(values.mean())
             row[f"{metric} population std"] = float(values.std(ddof=0))
-            row[f"{metric} median"] = float(np.median(values))
-            row[f"{metric} min"] = float(values.min())
-            row[f"{metric} max"] = float(values.max())
         rows.append(row)
     return rows
 
@@ -105,15 +99,13 @@ def paired(seedwise: list[dict], pairs: list[tuple[str, str]], metric_keys: list
             {seed for model, seed in lookup if model == direct}
             & {seed for model, seed in lookup if model == film}
         )
-        row = {"pair": f"{film}_vs_{direct}", "seeds": json.dumps(seeds), "num_seeds": len(seeds)}
+        row = {"pair": f"{film}_vs_{direct}", "seeds": ",".join(str(seed) for seed in seeds), "num_seeds": len(seeds)}
         for metric in metric_keys:
             direct_values = np.asarray([lookup[(direct, seed)][metric] for seed in seeds], dtype=np.float64)
             film_values = np.asarray([lookup[(film, seed)][metric] for seed in seeds], dtype=np.float64)
             reductions = 100.0 * (direct_values - film_values) / direct_values
             row[f"{metric} wins"] = int(np.sum(film_values < direct_values))
             row[f"{metric} mean reduction percent"] = float(reductions.mean())
-            row[f"{metric} median reduction percent"] = float(np.median(reductions))
-            row[f"{metric} reductions"] = json.dumps(reductions.tolist())
         rows.append(row)
     return rows
 
@@ -161,10 +153,6 @@ def main():
     write_csv(args.save_dir / "seedwise.csv", seedwise)
     write_csv(args.save_dir / "summary_by_model.csv", summary)
     write_csv(args.save_dir / "paired_summary.csv", paired_rows)
-    (args.save_dir / "results.json").write_text(
-        json.dumps({"seedwise": seedwise, "summary": summary, "paired": paired_rows}, indent=2) + "\n",
-        encoding="utf-8",
-    )
     print(f"Saved evaluation to {args.save_dir}", flush=True)
 
 

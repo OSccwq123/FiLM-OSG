@@ -20,7 +20,3 @@ implementation (MIT):
     https://github.com/neuraloperator/neuraloperator
 
 License text: `THIRD_PARTY_LICENSES/NEURALOPERATOR-MIT.txt`
-
-The optional `mamba_ssm` dependency is distributed under Apache-2.0 and is not
-included in this repository. Its license text is provided in
-`THIRD_PARTY_LICENSES/MAMBA-APACHE-2.0.txt`.

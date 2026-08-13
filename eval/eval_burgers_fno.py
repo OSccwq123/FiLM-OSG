@@ -1,9 +1,10 @@
-import os
-import csv
-import json
+from __future__ import annotations
+
 import argparse
+import csv
 import sys
 from pathlib import Path
+
 import numpy as np
 import torch
 from scipy.io import loadmat, savemat
@@ -14,19 +15,20 @@ if str(REPO_ROOT) not in sys.path:
 
 
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
-TRAIN_FILE = "BurgersOSG_train.mat"
-TEST_FILE = "BurgersOSG_test.mat"
+TEST_FILES = {
+    "original": "BurgersOSG_test.mat",
+    "sharp": "BurgersSharpOSG_test.mat",
+}
 
-DEFAULT_MODELS = ["fno", "fno_film", "gl_fno", "gl_fno_film"]
-DEFAULT_PAIRS = [("fno", "fno_film"), ("gl_fno", "gl_fno_film"), ("fno_film", "gl_fno_film")]
-DEFAULT_SEEDS = [0, 1, 2]
+DEFAULT_MODELS = ["fno", "fno_film"]
+DEFAULT_PAIRS = [("fno", "fno_film"), ("gl_fno", "gl_fno_film")]
+DEFAULT_SEEDS = [0, 1, 2, 3, 4]
 DEFAULT_TAG = ""
 DEFAULT_SAVE_DIR = "./eval_outputs_burgers_fno"
 
 
-def resolve_data_paths(data_dir: str | os.PathLike[str]):
-    data_root = Path(data_dir)
-    return str(data_root / TRAIN_FILE), str(data_root / TEST_FILE)
+def resolve_test_path(data_dir: str | Path, dataset: str):
+    return Path(data_dir) / TEST_FILES[dataset]
 
 
 def parse_int_list(text):
@@ -37,13 +39,13 @@ def parse_str_list(text):
     return [x.strip() for x in text.split(",") if x.strip()]
 
 
-def safe_torch_load(model_path, device):
+def load_model(model_path, device):
     return torch.load(model_path, map_location=device, weights_only=False)
 
 
 def model_path_for(model_name, seed, tag, root="."):
     suffix = f"_{tag}" if tag else ""
-    return os.path.join(root, f"runs_burgers_{model_name}_seed{seed}{suffix}", "model")
+    return Path(root) / f"runs_burgers_{model_name}_seed{seed}{suffix}" / "model"
 
 
 def _high_frequency_error_1d(pred_state, true_state, band_frac=1.0 / 3.0, eps=1e-12):
@@ -56,38 +58,13 @@ def _high_frequency_error_1d(pred_state, true_state, band_frac=1.0 / 3.0, eps=1e
     return np.linalg.norm(err_hat[start:].reshape(-1)) / (np.linalg.norm(ref_hat[start:].reshape(-1)) + eps)
 
 
-def _total_variation_1d(state):
-    return np.abs(np.roll(state, -1, axis=0) - state).sum(axis=0).mean()
-
-
-def _shock_location_error_1d(pred_state, true_state):
-    pred_grad = np.abs(np.roll(pred_state, -1, axis=0) - np.roll(pred_state, 1, axis=0)).reshape(pred_state.shape[0], -1).mean(axis=1)
-    true_grad = np.abs(np.roll(true_state, -1, axis=0) - np.roll(true_state, 1, axis=0)).reshape(true_state.shape[0], -1).mean(axis=1)
-    n = pred_state.shape[0]
-    raw = abs(int(np.argmax(pred_grad)) - int(np.argmax(true_grad)))
-    return float(min(raw, n - raw) / n)
-
-
-def _overshoot_error(pred_state, true_state):
-    return float(
-        max(0.0, float(pred_state.max() - true_state.max()))
-        + max(0.0, float(true_state.min() - pred_state.min()))
-    )
-
-
 def compute_metrics(pred, truth, eps=1e-12):
     pred_roll = pred[..., 1:]
     true_roll = truth[..., 1:]
 
-    mae = np.abs(pred_roll - true_roll).mean()
-
-    rel_l1_list = []
     rel_l2_list = []
     final_rel_l2_list = []
     hf_rel_list = []
-    tv_err_list = []
-    shock_loc_list = []
-    overshoot_list = []
 
     N = pred_roll.shape[0]
     T = pred_roll.shape[-1]
@@ -99,16 +76,10 @@ def compute_metrics(pred, truth, eps=1e-12):
             p = p_state.reshape(-1)
             y = y_state.reshape(-1)
 
-            rel_l1_list.append(
-                np.linalg.norm(p - y, 1) / (np.linalg.norm(y, 1) + eps)
-            )
             rel_l2_list.append(
                 np.linalg.norm(p - y, 2) / (np.linalg.norm(y, 2) + eps)
             )
             hf_rel_list.append(_high_frequency_error_1d(p_state, y_state, eps=eps))
-            tv_err_list.append(abs(_total_variation_1d(p_state) - _total_variation_1d(y_state)))
-            shock_loc_list.append(_shock_location_error_1d(p_state, y_state))
-            overshoot_list.append(_overshoot_error(p_state, y_state))
 
         pT = pred_roll[n, ..., -1].reshape(-1)
         yT = true_roll[n, ..., -1].reshape(-1)
@@ -117,34 +88,20 @@ def compute_metrics(pred, truth, eps=1e-12):
         )
 
     return {
-        "MAE": float(mae),
-        "Rel-L1": float(np.mean(rel_l1_list)),
         "Mean Rel-L2": float(np.mean(rel_l2_list)),
         "Final Rel-L2": float(np.mean(final_rel_l2_list)),
         "HF Rel-L2": float(np.mean(hf_rel_list)),
-        "TV Error": float(np.mean(tv_err_list)),
-        "Shock Loc Error": float(np.mean(shock_loc_list)),
-        "Overshoot": float(np.mean(overshoot_list)),
     }
 
 
 def summarize_metric_dicts(rows, metric_keys):
     out = {}
-
     for k in metric_keys:
         vals = np.array([r[k] for r in rows], dtype=np.float64)
-
         out[k] = {
             "mean": float(vals.mean()),
             "std": float(vals.std(ddof=0)),
-            "median": float(np.median(vals)),
-            "q25": float(np.percentile(vals, 25)),
-            "q75": float(np.percentile(vals, 75)),
-            "min": float(vals.min()),
-            "max": float(vals.max()),
-            "values": [float(v) for v in vals],
         }
-
     return out
 
 
@@ -154,19 +111,16 @@ def evaluate_one_model(
     tag,
     model_root,
     test_data,
-    train_data,
     device,
     eval_steps=None,
     save_mat=False,
     save_dir=DEFAULT_SAVE_DIR,
 ):
     path = model_path_for(model_name, seed, tag, root=model_root)
-
-    if not os.path.exists(path):
+    if not path.is_file():
         raise FileNotFoundError(f"Missing model: {path}")
 
-    model = safe_torch_load(path, device)
-    print("loaded_model_class =", f"{type(model).__module__}.{type(model).__name__}", flush=True)
+    model = load_model(path, device)
     model.eval()
 
     x0 = test_data["trajectories"][..., 0].astype(np.float32)
@@ -177,11 +131,6 @@ def evaluate_one_model(
         dt = dt[:, :eval_steps]
         truth = truth[..., :eval_steps + 1]
 
-    if "coordinates" in test_data:
-        coordinates = test_data["coordinates"]
-    else:
-        coordinates = train_data["coordinates"]
-
     with torch.no_grad():
         pred = model.predict(x0, dt, device)
 
@@ -191,9 +140,7 @@ def evaluate_one_model(
     step_tag = dt.shape[1]
 
     print(
-        f"{model_name:10s} seed={seed:>3d}, steps={step_tag:>3d} -> "
-        f"MAE={metrics['MAE']:.6e}, "
-        f"Rel-L1={metrics['Rel-L1']:.6e}, "
+        f"{model_name:12s} seed={seed}, steps={step_tag}: "
         f"Mean Rel-L2={metrics['Mean Rel-L2']:.6e}, "
         f"Final Rel-L2={metrics['Final Rel-L2']:.6e}, "
         f"HF Rel-L2={metrics['HF Rel-L2']:.6e}",
@@ -201,27 +148,23 @@ def evaluate_one_model(
     )
 
     if save_mat:
-        os.makedirs(save_dir, exist_ok=True)
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
         suffix = f"steps{step_tag}" if eval_steps is not None else "full"
         tag_part = f"_{tag}" if tag else ""
-        out_path = os.path.join(
-            save_dir,
-            f"{model_name}_seed{seed}{tag_part}_{suffix}_predictions.mat",
-        )
+        out_path = save_dir / f"{model_name}_seed{seed}{tag_part}_{suffix}_predictions.mat"
 
-        savemat(
-            out_path,
-            {
-                "prediction": pred,
-                "truth": truth,
-                "dt": dt,
-                "coordinates": coordinates,
-                "metrics_MAE": np.array([[metrics["MAE"]]], dtype=np.float32),
-                "metrics_RelL1": np.array([[metrics["Rel-L1"]]], dtype=np.float32),
-                "metrics_MeanRelL2": np.array([[metrics["Mean Rel-L2"]]], dtype=np.float32),
-                "metrics_FinalRelL2": np.array([[metrics["Final Rel-L2"]]], dtype=np.float32),
-            },
-        )
+        output = {
+            "prediction": pred,
+            "truth": truth,
+            "dt": dt,
+            "metrics_MeanRelL2": np.array([[metrics["Mean Rel-L2"]]], dtype=np.float32),
+            "metrics_FinalRelL2": np.array([[metrics["Final Rel-L2"]]], dtype=np.float32),
+            "metrics_HFRelL2": np.array([[metrics["HF Rel-L2"]]], dtype=np.float32),
+        }
+        if "coordinates" in test_data:
+            output["coordinates"] = test_data["coordinates"]
+        savemat(out_path, output)
         print(f"Saved predictions to {out_path}", flush=True)
 
     del model
@@ -231,13 +174,11 @@ def evaluate_one_model(
     return metrics
 
 
-def write_csv(path, rows):
+def write_csv(path: Path, rows):
     if not rows:
         return
-
     fieldnames = list(rows[0].keys())
-
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
@@ -250,18 +191,13 @@ def flatten_summary_rows(summary_by_model, metric_keys):
         row = {
             "model": model_name,
             "num_seeds": item["num_seeds"],
-            "seeds": json.dumps(item["seeds"]),
+            "seeds": ",".join(str(seed) for seed in item["seeds"]),
         }
 
         for k in metric_keys:
             s = item["metrics"][k]
             row[f"{k}_mean"] = s["mean"]
             row[f"{k}_std"] = s["std"]
-            row[f"{k}_median"] = s["median"]
-            row[f"{k}_q25"] = s["q25"]
-            row[f"{k}_q75"] = s["q75"]
-            row[f"{k}_min"] = s["min"]
-            row[f"{k}_max"] = s["max"]
 
         rows.append(row)
 
@@ -269,89 +205,38 @@ def flatten_summary_rows(summary_by_model, metric_keys):
 
 
 def paired_comparison(seedwise_rows, pairs, metric_keys):
-    by_key = {}
-    for r in seedwise_rows:
-        by_key[(r["model"], int(r["seed"]))] = r
+    by_key = {(r["model"], int(r["seed"])): r for r in seedwise_rows}
+    summary = []
 
-    paired_rows = []
-    paired_summary = []
-
-    for direct, film in pairs:
-        rows_pair = []
-
+    for baseline, conditioned in pairs:
         seeds = sorted(
-            set(seed for (model, seed) in by_key.keys() if model == direct)
-            & set(seed for (model, seed) in by_key.keys() if model == film)
+            {seed for model, seed in by_key if model == baseline}
+            & {seed for model, seed in by_key if model == conditioned}
         )
         if not seeds:
             continue
 
-        for seed in seeds:
-            d = by_key[(direct, seed)]
-            f = by_key[(film, seed)]
-
-            row = {
-                "pair": f"{film}_vs_{direct}",
-                "direct": direct,
-                "film": film,
-                "seed": seed,
-            }
-
-            for k in metric_keys:
-                direct_val = float(d[k])
-                film_val = float(f[k])
-
-                row[f"direct_{k}"] = direct_val
-                row[f"film_{k}"] = film_val
-                row[f"film_better_{k}"] = bool(film_val < direct_val)
-                row[f"reduction_percent_{k}"] = (
-                    (direct_val - film_val) / direct_val * 100.0
-                    if direct_val != 0.0
-                    else np.nan
-                )
-
-            paired_rows.append(row)
-            rows_pair.append(row)
-
-        summary_row = {
-            "pair": f"{film}_vs_{direct}",
-            "direct": direct,
-            "film": film,
-            "num_paired_seeds": len(rows_pair),
-            "seeds": json.dumps(seeds),
+        row = {
+            "pair": f"{conditioned}_vs_{baseline}",
+            "baseline": baseline,
+            "conditioned": conditioned,
+            "num_paired_seeds": len(seeds),
+            "seeds": ",".join(str(seed) for seed in seeds),
         }
-
         for k in metric_keys:
-            reductions = np.array(
-                [r[f"reduction_percent_{k}"] for r in rows_pair],
-                dtype=np.float64,
-            )
-            wins = sum(bool(r[f"film_better_{k}"]) for r in rows_pair)
+            base = np.array([by_key[(baseline, seed)][k] for seed in seeds])
+            cond = np.array([by_key[(conditioned, seed)][k] for seed in seeds])
+            reductions = (base - cond) / base * 100.0
+            row[f"{k}_wins"] = int(np.sum(cond < base))
+            row[f"{k}_mean_reduction_percent"] = float(np.mean(reductions))
+            row[f"{k}_median_reduction_percent"] = float(np.median(reductions))
+        summary.append(row)
 
-            if len(reductions) > 0:
-                summary_row[f"{k}_wins"] = int(wins)
-                summary_row[f"{k}_total"] = int(len(reductions))
-                summary_row[f"{k}_mean_reduction_percent"] = float(np.nanmean(reductions))
-                summary_row[f"{k}_median_reduction_percent"] = float(np.nanmedian(reductions))
-                summary_row[f"{k}_q25_reduction_percent"] = float(np.nanpercentile(reductions, 25))
-                summary_row[f"{k}_q75_reduction_percent"] = float(np.nanpercentile(reductions, 75))
-                summary_row[f"{k}_reductions"] = json.dumps([float(x) for x in reductions])
-            else:
-                summary_row[f"{k}_wins"] = 0
-                summary_row[f"{k}_total"] = 0
-                summary_row[f"{k}_mean_reduction_percent"] = np.nan
-                summary_row[f"{k}_median_reduction_percent"] = np.nan
-                summary_row[f"{k}_q25_reduction_percent"] = np.nan
-                summary_row[f"{k}_q75_reduction_percent"] = np.nan
-                summary_row[f"{k}_reductions"] = json.dumps([])
-
-        paired_summary.append(summary_row)
-
-    return paired_rows, paired_summary
+    return summary
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Evaluate Burgers rollouts across trained seeds.")
 
     parser.add_argument("--models", type=str, default=",".join(DEFAULT_MODELS))
     parser.add_argument("--seeds", type=str, default=",".join(str(s) for s in DEFAULT_SEEDS))
@@ -359,6 +244,12 @@ def main():
     parser.add_argument("--model-root", type=str, default=".")
     parser.add_argument("--save-dir", type=str, default=DEFAULT_SAVE_DIR)
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
+    parser.add_argument(
+        "--dataset",
+        choices=TEST_FILES,
+        default="original",
+        help="Select the original or steep-gradient Burgers data files.",
+    )
     parser.add_argument("--eval-steps", type=int, default=None)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--save-mat", action="store_true")
@@ -367,49 +258,31 @@ def main():
 
     models = parse_str_list(args.models)
     seeds = parse_int_list(args.seeds)
-    train_path, test_path = resolve_data_paths(args.data_dir)
+    test_path = resolve_test_path(args.data_dir, args.dataset)
+    if not test_path.is_file():
+        raise FileNotFoundError(f"Test data not found: {test_path}")
 
-    metric_keys = ["MAE", "Rel-L1", "Mean Rel-L2", "Final Rel-L2", "HF Rel-L2", "TV Error", "Shock Loc Error", "Overshoot"]
-
-    print("=" * 80, flush=True)
-    print("Burgers FNO evaluation", flush=True)
-    print("Models:", models, flush=True)
-    print("Seeds:", seeds, flush=True)
-    print("Tag:", args.tag if args.tag else "(none)", flush=True)
-    print("Model root:", args.model_root, flush=True)
-    print("Device:", args.device, flush=True)
-    print("Eval steps:", args.eval_steps if args.eval_steps is not None else "full", flush=True)
-    print("Save dir:", args.save_dir, flush=True)
-    print("=" * 80, flush=True)
-
-    os.makedirs(args.save_dir, exist_ok=True)
-
-    train_data = loadmat(train_path)
+    metric_keys = ("Mean Rel-L2", "Final Rel-L2", "HF Rel-L2")
+    save_dir = Path(args.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
     test_data = loadmat(test_path)
 
-    print("Train trajectories shape:", train_data["trajectories"].shape, flush=True)
-    print("Test trajectories shape:", test_data["trajectories"].shape, flush=True)
-    print("Test dt shape:", test_data["dt"].shape, flush=True)
+    print(f"Burgers evaluation: dataset={args.dataset}, models={models}, seeds={seeds}")
+    print(f"Test data: {test_path}")
 
     seedwise_rows = []
     for model_name in models:
         for seed in seeds:
-            path = model_path_for(model_name, seed, args.tag, root=args.model_root)
-
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Missing model: {path}")
-
             metrics = evaluate_one_model(
                 model_name=model_name,
                 seed=seed,
                 tag=args.tag,
                 model_root=args.model_root,
                 test_data=test_data,
-                train_data=train_data,
                 device=args.device,
                 eval_steps=args.eval_steps,
                 save_mat=args.save_mat,
-                save_dir=args.save_dir,
+                save_dir=save_dir,
             )
 
             row = {
@@ -421,13 +294,8 @@ def main():
             seedwise_rows.append(row)
 
     summary_by_model = {}
-
     for model_name in models:
         rows = [r for r in seedwise_rows if r["model"] == model_name]
-
-        if not rows:
-            continue
-
         summary_by_model[model_name] = {
             "model": model_name,
             "num_seeds": len(rows),
@@ -435,47 +303,15 @@ def main():
             "metrics": summarize_metric_dicts(rows, metric_keys),
         }
 
-    paired_rows, paired_summary = paired_comparison(
-        seedwise_rows,
-        DEFAULT_PAIRS,
-        metric_keys,
-    )
+    paired_summary = paired_comparison(seedwise_rows, DEFAULT_PAIRS, metric_keys)
 
-    seedwise_csv = os.path.join(args.save_dir, "burgers_fno_seedwise.csv")
-    summary_csv = os.path.join(args.save_dir, "burgers_fno_summary_by_model.csv")
-    summary_json = os.path.join(args.save_dir, "burgers_fno_summary_by_model.json")
-    paired_csv = os.path.join(args.save_dir, "burgers_fno_paired_seedwise.csv")
-    paired_summary_csv = os.path.join(args.save_dir, "burgers_fno_paired_summary.csv")
-    paired_json = os.path.join(args.save_dir, "burgers_fno_paired.json")
+    seedwise_csv = save_dir / "burgers_fno_seedwise.csv"
+    summary_csv = save_dir / "burgers_fno_summary_by_model.csv"
+    paired_csv = save_dir / "burgers_fno_paired_summary.csv"
 
     write_csv(seedwise_csv, seedwise_rows)
     write_csv(summary_csv, flatten_summary_rows(summary_by_model, metric_keys))
-    write_csv(paired_csv, paired_rows)
-    write_csv(paired_summary_csv, paired_summary)
-
-    with open(summary_json, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "models": models,
-                "seeds": seeds,
-                "tag": args.tag,
-                "eval_steps": args.eval_steps,
-                "summary_by_model": summary_by_model,
-            },
-            f,
-            indent=2,
-        )
-
-    with open(paired_json, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "pairs": DEFAULT_PAIRS,
-                "paired_seedwise": paired_rows,
-                "paired_summary": paired_summary,
-            },
-            f,
-            indent=2,
-        )
+    write_csv(paired_csv, paired_summary)
 
     print("\nSummary by model:", flush=True)
     for model_name, item in summary_by_model.items():
@@ -484,10 +320,7 @@ def main():
             s = item["metrics"][k]
             print(
                 f"  {k}: "
-                f"mean={s['mean']:.6e}, std={s['std']:.6e}, "
-                f"median={s['median']:.6e}, "
-                f"IQR=[{s['q25']:.6e}, {s['q75']:.6e}], "
-                f"range=[{s['min']:.6e}, {s['max']:.6e}]",
+                f"mean={s['mean']:.6e}, std={s['std']:.6e}",
                 flush=True,
             )
 
@@ -497,21 +330,13 @@ def main():
         for k in metric_keys:
             print(
                 f"  {k}: "
-                f"wins={row[f'{k}_wins']}/{row[f'{k}_total']}, "
+                f"wins={row[f'{k}_wins']}/{row['num_paired_seeds']}, "
                 f"median reduction={row[f'{k}_median_reduction_percent']:.2f}%, "
                 f"mean reduction={row[f'{k}_mean_reduction_percent']:.2f}%",
                 flush=True,
             )
 
-    print("\nSaved outputs:", flush=True)
-    print(" ", seedwise_csv, flush=True)
-    print(" ", summary_csv, flush=True)
-    print(" ", summary_json, flush=True)
-    print(" ", paired_csv, flush=True)
-    print(" ", paired_summary_csv, flush=True)
-    print(" ", paired_json, flush=True)
-
-    print("=" * 80, flush=True)
+    print(f"\nSaved summaries to {save_dir}")
 
 
 if __name__ == "__main__":

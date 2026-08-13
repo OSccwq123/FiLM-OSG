@@ -1,483 +1,148 @@
 #!/usr/bin/env python3
-"""Convert fixed-time PDEBench HDF5 trajectories into FiLM-OSG .mat files.
+"""Form the two PDEBench datasets used in the FiLM-OSG experiments.
 
-The existing FiLM-OSG dataset loader expects MATLAB files with
-
-    trajectories: 1D -> (N, L, D, T), 2D -> (N, H, W, D, T)
-    dt:           (N, T - 1)
-    coordinates:  1D -> (L, 1), 2D -> (H, W, 2)
-
-For a variable-lag task from a fixed-time PDEBench trajectory, this script
-samples pairs (u(t_i), u(t_j)) and stores each pair as a two-frame trajectory.
-The downstream OSG loader can then consume the file without changing the
-training code: the only adjacent transition has lag t_j - t_i.
+The source HDF5 file is expected to contain one numeric group per trajectory.
+Each group contains ``data`` with shape (time, x, y, channels) and the arrays
+``grid/t``, ``grid/x``, and ``grid/y``.  Train and test trajectories are split
+before variable-lag pairs are sampled.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
-from typing import Iterable
 
+import h5py
 import numpy as np
 from scipy.io import savemat
-
-h5py = None
-
-
-DEFAULT_DATA_KEYS = (
-    "tensor",
-    "data",
-    "u",
-    "solution",
-    "solutions",
-    "density",
-    "Vx",
-)
-
-DEFAULT_TIME_KEYS = (
-    "t-coordinate",
-    "t_coordinates",
-    "t",
-    "time",
-    "times",
-)
-
-DEFAULT_X_KEYS = (
-    "x-coordinate",
-    "x_coordinates",
-    "x",
-    "grid/x",
-)
-
-DEFAULT_Y_KEYS = (
-    "y-coordinate",
-    "y_coordinates",
-    "y",
-    "grid/y",
-)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Sample variable-lag FiLM-OSG train/test .mat files from a local "
-            "PDEBench HDF5/H5 shard."
-        )
+        description="Convert grouped two-dimensional PDEBench trajectories to OSG pairs."
     )
-    parser.add_argument("--input", required=True, type=Path, help="PDEBench .h5/.hdf5 file.")
-    parser.add_argument("--output-dir", required=True, type=Path, help="Directory for .mat outputs.")
-    parser.add_argument("--prefix", default="PDEBenchOSG", help="Output prefix, e.g. PDEBenchSWEOSG.")
-    parser.add_argument("--problem-dim", choices=["1d", "2d"], required=True)
-    parser.add_argument("--data-key", default=None, help="HDF5 key for the solution tensor.")
-    parser.add_argument(
-        "--grouped",
-        action="store_true",
-        help="Read PDEBench group-per-trajectory files such as 0000/data, 0001/data, ...",
-    )
-    parser.add_argument("--group-data-key", default="data", help="Dataset name inside each trajectory group.")
-    parser.add_argument("--max-trajectories", type=int, default=None, help="Optional limit on grouped trajectories.")
-    parser.add_argument(
-        "--train-trajectories",
-        type=int,
-        default=None,
-        help="Number of grouped trajectories reserved for training pairs.",
-    )
-    parser.add_argument(
-        "--test-trajectories",
-        type=int,
-        default=None,
-        help="Number of disjoint grouped trajectories reserved for test pairs.",
-    )
-    parser.add_argument(
-        "--trajectory-split-seed",
-        type=int,
-        default=0,
-        help="Seed used only for the grouped trajectory-level train/test split.",
-    )
-    parser.add_argument(
-        "--layout",
-        default="auto",
-        choices=[
-            "auto",
-            "NTL",
-            "NLT",
-            "NTLD",
-            "NLDT",
-            "NLTD",
-            "NTHW",
-            "NHWT",
-            "NTHWD",
-            "NHWTD",
-            "NHWDT",
-            "HWD",
-            "DHW",
-            "LD",
-            "DL",
-        ],
-        help=(
-            "Raw tensor layout. Use an explicit value after inspecting a real "
-            "PDEBench file; auto covers common PDEBench layouts but cannot "
-            "resolve every ambiguous HDF5 convention."
-        ),
-    )
-    parser.add_argument("--time-key", default=None, help="HDF5 key for time coordinates.")
-    parser.add_argument("--x-key", default=None, help="HDF5 key for x coordinates.")
-    parser.add_argument("--y-key", default=None, help="HDF5 key for y coordinates, for 2D data.")
-    parser.add_argument("--component", type=int, default=None, help="Optional component index to keep.")
+    parser.add_argument("--input", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--prefix", required=True)
+    parser.add_argument("--train-trajectories", type=int, default=800)
+    parser.add_argument("--test-trajectories", type=int, default=200)
     parser.add_argument("--train-pairs", type=int, default=5000)
     parser.add_argument("--test-pairs", type=int, default=1000)
     parser.add_argument("--min-lag-steps", type=int, default=1)
-    parser.add_argument("--max-lag-steps", type=int, default=None)
-    parser.add_argument("--time-stride", type=int, default=1, help="Subsample input time axis before pairing.")
-    parser.add_argument("--space-stride", type=int, default=1, help="Uniform spatial subsampling factor.")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--dtype", default="float32", choices=["float32", "float64"])
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print detected shapes and planned output names without writing .mat files.",
-    )
+    parser.add_argument("--max-lag-steps", type=int, default=20)
+    parser.add_argument("--space-stride", type=int, default=1)
+    parser.add_argument("--split-seed", type=int, default=0)
+    parser.add_argument("--pair-seed", type=int, default=0)
+    parser.add_argument("--data-key", default="data")
+    parser.add_argument("--dtype", choices=("float32", "float64"), default="float32")
     return parser.parse_args()
 
 
-def iter_datasets(h5: h5py.File) -> Iterable[tuple[str, h5py.Dataset]]:
-    def visit(name: str, obj):
-        if isinstance(obj, h5py.Dataset):
-            datasets.append((name, obj))
-
-    datasets: list[tuple[str, h5py.Dataset]] = []
-    h5.visititems(visit)
-    return datasets
+def numeric_groups(h5: h5py.File) -> list[str]:
+    return sorted(key for key in h5 if key.isdigit() and isinstance(h5[key], h5py.Group))
 
 
-def pick_key(h5: h5py.File, explicit: str | None, candidates: tuple[str, ...], *, min_ndim: int = 1) -> str:
-    if explicit is not None:
-        if explicit not in h5:
-            raise KeyError(f"Requested key {explicit!r} not found in {list(h5.keys())}")
-        return explicit
-    for key in candidates:
-        if key in h5 and getattr(h5[key], "ndim", 0) >= min_ndim:
-            return key
-    for key, dataset in iter_datasets(h5):
-        if dataset.ndim >= min_ndim and not any(token in key.lower() for token in ("coord", "grid", "time")):
-            return key
-    raise KeyError(f"Could not infer a dataset key with ndim >= {min_ndim}.")
+def split_trajectories(
+    group_keys: list[str], n_train: int, n_test: int, seed: int
+) -> tuple[list[str], list[str]]:
+    total = n_train + n_test
+    if n_train < 1 or n_test < 1 or total > len(group_keys):
+        raise ValueError(
+            f"Requested {n_train} train and {n_test} test trajectories "
+            f"from {len(group_keys)} available groups."
+        )
+    order = np.random.default_rng(seed).permutation(len(group_keys))[:total]
+    selected = np.asarray(group_keys)[order].tolist()
+    train_keys = selected[:n_train]
+    test_keys = selected[n_train:]
+    assert set(train_keys).isdisjoint(test_keys)
+    return train_keys, test_keys
 
 
-def read_vector(h5: h5py.File, explicit: str | None, candidates: tuple[str, ...], length: int, name: str) -> np.ndarray:
-    key = explicit
-    if key is None:
-        for candidate in candidates:
-            if candidate in h5:
-                key = candidate
-                break
-    if key is None:
-        return np.linspace(0.0, 1.0, length, dtype=np.float64)
-    values = np.asarray(h5[key]).squeeze()
-    if values.ndim != 1:
-        raise ValueError(f"{name} coordinate {key!r} should be one-dimensional, got {values.shape}.")
-    if values.shape[0] != length:
-        raise ValueError(f"{name} coordinate length {values.shape[0]} does not match expected {length}.")
-    return values.astype(np.float64)
-
-
-def normalize_to_osg_layout(raw: np.ndarray, problem_dim: str, component: int | None, layout: str = "auto") -> np.ndarray:
-    """Return data in 1D (N,L,D,T) or 2D (N,H,W,D,T) layout.
-
-    PDEBench files have changed naming conventions over time. This heuristic
-    accepts the common layouts where sample is the first axis and time is either
-    the second or last axis. Ambiguous files should be inspected with --dry-run
-    and converted with a small wrapper if needed.
-    """
-    arr = np.asarray(raw)
-    if problem_dim == "1d":
-        if layout == "NTL":
-            arr = np.transpose(arr, (0, 2, 1))[:, :, None, :]
-        elif layout == "NLT":
-            arr = arr[:, :, None, :]
-        elif layout == "NTLD":
-            arr = np.transpose(arr, (0, 2, 3, 1))
-        elif layout == "NLDT":
-            pass
-        elif layout == "NLTD":
-            arr = np.transpose(arr, (0, 1, 3, 2))
-        elif layout != "auto":
-            raise ValueError(f"Layout {layout!r} is not valid for 1D data.")
-        if layout != "auto":
-            if component is not None:
-                arr = arr[:, :, component : component + 1, :]
-            return arr
-
-        if arr.ndim == 3:
-            # Prefer (N,T,L), common for PDEBench 1D files.
-            n, a, b = arr.shape
-            if a <= b:
-                arr = np.transpose(arr, (0, 2, 1))[:, :, None, :]
-            else:
-                arr = arr[:, :, None, :]
-        elif arr.ndim == 4:
-            # (N,T,L,D) or (N,L,T,D) or already (N,L,D,T).
-            if arr.shape[1] <= arr.shape[2]:
-                arr = np.transpose(arr, (0, 2, 3, 1))
-            elif arr.shape[-1] <= arr.shape[2]:
-                arr = np.transpose(arr, (0, 1, 3, 2))
-        else:
-            raise ValueError(f"Unsupported 1D data shape {arr.shape}.")
-        if component is not None:
-            arr = arr[:, :, component : component + 1, :]
-        return arr
-
-    if layout == "NTHW":
-        arr = np.transpose(arr, (0, 2, 3, 1))[:, :, :, None, :]
-    elif layout == "NHWT":
-        arr = arr[:, :, :, None, :]
-    elif layout == "NTHWD":
-        arr = np.transpose(arr, (0, 2, 3, 4, 1))
-    elif layout == "NHWTD":
-        arr = np.transpose(arr, (0, 1, 2, 4, 3))
-    elif layout == "NHWDT":
-        pass
-    elif layout != "auto":
-        raise ValueError(f"Layout {layout!r} is not valid for 2D data.")
-    if layout != "auto":
-        if component is not None:
-            arr = arr[:, :, :, component : component + 1, :]
-        return arr
-
-    if arr.ndim == 4:
-        # (N,T,H,W) or (N,H,W,T).
-        if arr.shape[1] <= min(arr.shape[2], arr.shape[3]):
-            arr = np.transpose(arr, (0, 2, 3, 1))[:, :, :, None, :]
-        else:
-            arr = arr[:, :, :, None, :]
-    elif arr.ndim == 5:
-        # (N,T,H,W,D), (N,H,W,T,D), or already (N,H,W,D,T).
-        if arr.shape[1] <= min(arr.shape[2], arr.shape[3]):
-            arr = np.transpose(arr, (0, 2, 3, 4, 1))
-        elif arr.shape[-1] <= min(arr.shape[1], arr.shape[2]):
-            arr = np.transpose(arr, (0, 1, 2, 4, 3))
-    else:
-        raise ValueError(f"Unsupported 2D data shape {arr.shape}.")
-    if component is not None:
-        arr = arr[:, :, :, component : component + 1, :]
-    return arr
-
-
-def downsample(data: np.ndarray, problem_dim: str, stride: int) -> np.ndarray:
-    if stride <= 1:
-        return data
-    if problem_dim == "1d":
-        return data[:, ::stride, :, :]
-    return data[:, ::stride, ::stride, :, :]
-
-
-def downsample_frame(frame: np.ndarray, problem_dim: str, stride: int) -> np.ndarray:
-    if stride <= 1:
-        return frame
-    if problem_dim == "1d":
-        return frame[::stride, :]
+def read_frame(dataset: h5py.Dataset, index: int, stride: int) -> np.ndarray:
+    frame = np.asarray(dataset[index])
+    if frame.ndim == 2:
+        frame = frame[:, :, None]
+    if frame.ndim != 3:
+        raise ValueError(
+            f"Expected a PDEBench frame with shape (x,y,channels), got {frame.shape}."
+        )
     return frame[::stride, ::stride, :]
 
 
-def make_coordinates(h5: h5py.File, problem_dim: str, shape: tuple[int, ...], args: argparse.Namespace) -> np.ndarray:
-    if problem_dim == "1d":
-        length = shape[1]
-        x = read_vector(h5, args.x_key, DEFAULT_X_KEYS, length * args.space_stride, "x")
-        x = x[:: args.space_stride][:length]
-        return x.reshape(length, 1)
-
-    h, w = shape[1], shape[2]
-    x = read_vector(h5, args.x_key, DEFAULT_X_KEYS, h * args.space_stride, "x")
-    y = read_vector(h5, args.y_key, DEFAULT_Y_KEYS, w * args.space_stride, "y")
-    x = x[:: args.space_stride][:h]
-    y = y[:: args.space_stride][:w]
-    xx, yy = np.meshgrid(x, y, indexing="ij")
-    return np.stack([xx, yy], axis=-1)
-
-
-def sample_pairs(
-    data: np.ndarray,
-    times: np.ndarray,
-    n_pairs: int,
-    min_lag_steps: int,
-    max_lag_steps: int,
-    rng: np.random.Generator,
-    problem_dim: str,
-) -> tuple[np.ndarray, np.ndarray]:
-    n_traj = data.shape[0]
-    n_time = data.shape[-1]
-    if n_time < 2:
-        raise ValueError("Need at least two time instances.")
-    max_lag_steps = min(max_lag_steps, n_time - 1)
-    if min_lag_steps < 1 or min_lag_steps > max_lag_steps:
-        raise ValueError(f"Invalid lag range [{min_lag_steps}, {max_lag_steps}] for T={n_time}.")
-
-    if problem_dim == "1d":
-        pairs = np.empty((n_pairs, data.shape[1], data.shape[2], 2), dtype=data.dtype)
-    else:
-        pairs = np.empty((n_pairs, data.shape[1], data.shape[2], data.shape[3], 2), dtype=data.dtype)
-    dt = np.empty((n_pairs, 1), dtype=np.float64)
-
-    for idx in range(n_pairs):
-        traj = rng.integers(0, n_traj)
-        lag = int(rng.integers(min_lag_steps, max_lag_steps + 1))
-        start = int(rng.integers(0, n_time - lag))
-        stop = start + lag
-        pairs[..., 0][idx] = data[traj, ..., start]
-        pairs[..., 1][idx] = data[traj, ..., stop]
-        dt[idx, 0] = times[stop] - times[start]
-    return pairs, dt
-
-
-def numeric_group_keys(h5) -> list[str]:
-    keys = [key for key in h5.keys() if key.isdigit() and hasattr(h5[key], "keys")]
-    return sorted(keys)
-
-
-def make_coordinates_grouped(h5, group_key: str, problem_dim: str, shape: tuple[int, ...], args: argparse.Namespace) -> np.ndarray:
-    group = h5[group_key]
-    if problem_dim == "1d":
-        length = shape[0]
-        x_key = args.x_key or "grid/x"
-        if x_key in group:
-            x = np.asarray(group[x_key]).squeeze().astype(np.float64)
-        else:
-            x = np.linspace(0.0, 1.0, length * args.space_stride, dtype=np.float64)
-        return x[:: args.space_stride][:length].reshape(length, 1)
-
-    h, w = shape[0], shape[1]
-    x_key = args.x_key or "grid/x"
-    y_key = args.y_key or "grid/y"
-    if x_key in group:
-        x = np.asarray(group[x_key]).squeeze().astype(np.float64)
-    else:
-        x = np.linspace(0.0, 1.0, h * args.space_stride, dtype=np.float64)
-    if y_key in group:
-        y = np.asarray(group[y_key]).squeeze().astype(np.float64)
-    else:
-        y = np.linspace(0.0, 1.0, w * args.space_stride, dtype=np.float64)
-    x = x[:: args.space_stride][:h]
-    y = y[:: args.space_stride][:w]
-    xx, yy = np.meshgrid(x, y, indexing="ij")
-    return np.stack([xx, yy], axis=-1)
-
-
-def normalize_group_frame(raw: np.ndarray, problem_dim: str, component: int | None, layout: str) -> np.ndarray:
-    arr = np.asarray(raw)
-    if problem_dim == "1d":
-        if layout in {"auto", "LD"}:
-            if arr.ndim == 1:
-                arr = arr[:, None]
-            elif arr.ndim != 2:
-                raise ValueError(f"Unsupported grouped 1D frame shape {arr.shape}")
-        elif layout == "DL":
-            arr = np.transpose(arr, (1, 0))
-        else:
-            raise ValueError(f"Grouped 1D frame layout {layout!r} is not supported.")
-        if component is not None:
-            arr = arr[:, component : component + 1]
-        return arr
-
-    if layout in {"auto", "HWD"}:
-        if arr.ndim == 2:
-            arr = arr[:, :, None]
-        elif arr.ndim != 3:
-            raise ValueError(f"Unsupported grouped 2D frame shape {arr.shape}")
-    elif layout == "DHW":
-        arr = np.transpose(arr, (1, 2, 0))
-    else:
-        raise ValueError(f"Grouped 2D frame layout {layout!r} is not supported.")
-    if component is not None:
-        arr = arr[:, :, component : component + 1]
-    return arr
-
-
-def balanced_group_schedule(group_keys: list[str], n_pairs: int, rng: np.random.Generator) -> list[str]:
-    """Assign pairs approximately uniformly while covering every selected trajectory."""
+def balanced_schedule(
+    group_keys: list[str], n_pairs: int, rng: np.random.Generator
+) -> list[str]:
     if n_pairs < len(group_keys):
-        raise ValueError(
-            f"n_pairs={n_pairs} is smaller than the selected trajectory count "
-            f"{len(group_keys)}; every trajectory must contribute at least one pair."
-        )
+        raise ValueError("The number of pairs must cover every selected trajectory.")
     repeats, remainder = divmod(n_pairs, len(group_keys))
-    schedule = list(group_keys) * repeats
+    schedule = group_keys * repeats
     if remainder:
-        schedule.extend(np.asarray(group_keys)[rng.permutation(len(group_keys))[:remainder]].tolist())
+        schedule.extend(
+            np.asarray(group_keys)[rng.permutation(len(group_keys))[:remainder]].tolist()
+        )
     rng.shuffle(schedule)
     return schedule
 
 
-def split_group_keys(group_keys: list[str], args: argparse.Namespace) -> tuple[list[str], list[str]]:
-    requested = (args.train_trajectories, args.test_trajectories)
-    if requested == (None, None):
-        return group_keys, group_keys
-    if any(value is None for value in requested):
-        raise ValueError("--train-trajectories and --test-trajectories must be provided together.")
-    if args.train_trajectories < 1 or args.test_trajectories < 1:
-        raise ValueError("Trajectory split sizes must be positive.")
-    total = args.train_trajectories + args.test_trajectories
-    if total > len(group_keys):
-        raise ValueError(f"Requested {total} trajectories but only {len(group_keys)} are available.")
-    split_rng = np.random.default_rng(args.trajectory_split_seed)
-    shuffled = np.asarray(group_keys)[split_rng.permutation(len(group_keys))[:total]].tolist()
-    train_keys = shuffled[: args.train_trajectories]
-    test_keys = shuffled[args.train_trajectories :]
-    overlap = set(train_keys).intersection(test_keys)
-    if overlap:
-        raise RuntimeError(f"Trajectory-level split overlap detected: {sorted(overlap)[:5]}")
-    return train_keys, test_keys
+def sample_pairs(
+    h5: h5py.File,
+    group_keys: list[str],
+    n_pairs: int,
+    min_lag: int,
+    max_lag: int,
+    stride: int,
+    data_key: str,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    first = h5[group_keys[0]][data_key]
+    n_time = first.shape[0]
+    if not 1 <= min_lag <= max_lag < n_time:
+        raise ValueError(f"Invalid lag-step range [{min_lag},{max_lag}] for T={n_time}.")
 
+    sample = read_frame(first, 0, stride)
+    trajectories = np.empty((n_pairs, *sample.shape, 2), dtype=sample.dtype)
+    lags = np.empty((n_pairs, 1), dtype=np.float64)
 
-def sample_pairs_grouped(h5, group_keys: list[str], args: argparse.Namespace, n_pairs: int, rng: np.random.Generator):
-    first_group = h5[group_keys[0]]
-    dataset = first_group[args.group_data_key]
-    n_time = dataset.shape[0]
-    max_lag_steps = min(args.max_lag_steps or (n_time - 1), n_time - 1)
-    if args.min_lag_steps < 1 or args.min_lag_steps > max_lag_steps:
-        raise ValueError(f"Invalid lag range [{args.min_lag_steps}, {max_lag_steps}] for T={n_time}.")
-
-    first_frame = normalize_group_frame(dataset[0], args.problem_dim, args.component, "HWD" if args.layout == "auto" else args.layout)
-    first_frame = downsample_frame(first_frame, args.problem_dim, args.space_stride)
-    if args.problem_dim == "1d":
-        pairs = np.empty((n_pairs, first_frame.shape[0], first_frame.shape[1], 2), dtype=first_frame.dtype)
-    else:
-        pairs = np.empty((n_pairs, first_frame.shape[0], first_frame.shape[1], first_frame.shape[2], 2), dtype=first_frame.dtype)
-    dt = np.empty((n_pairs, 1), dtype=np.float64)
-
-    group_schedule = balanced_group_schedule(group_keys, n_pairs, rng)
-    for idx, group_key in enumerate(group_schedule):
+    for pair_id, group_key in enumerate(balanced_schedule(group_keys, n_pairs, rng)):
         group = h5[group_key]
-        data = group[args.group_data_key]
-        lag = int(rng.integers(args.min_lag_steps, max_lag_steps + 1))
-        start = int(rng.integers(0, n_time - lag))
-        stop = start + lag
-        frame0 = normalize_group_frame(data[start], args.problem_dim, args.component, "HWD" if args.layout == "auto" else args.layout)
-        frame1 = normalize_group_frame(data[stop], args.problem_dim, args.component, "HWD" if args.layout == "auto" else args.layout)
-        frame0 = downsample_frame(frame0, args.problem_dim, args.space_stride)
-        frame1 = downsample_frame(frame1, args.problem_dim, args.space_stride)
-        pairs[..., 0][idx] = frame0
-        pairs[..., 1][idx] = frame1
-        t_key = args.time_key or "grid/t"
-        if t_key in group:
-            times = np.asarray(group[t_key]).squeeze().astype(np.float64)
-            dt[idx, 0] = times[stop] - times[start]
-        else:
-            dt[idx, 0] = stop - start
+        data = group[data_key]
+        times = np.asarray(group["grid/t"]).squeeze()
+        if data.shape[0] != n_time or times.shape != (n_time,):
+            raise ValueError(f"Inconsistent time axis in trajectory {group_key}.")
 
-    coords = make_coordinates_grouped(h5, group_keys[0], args.problem_dim, first_frame.shape, args)
-    return pairs, dt, coords, n_time, max_lag_steps
+        lag_steps = int(rng.integers(min_lag, max_lag + 1))
+        start = int(rng.integers(0, n_time - lag_steps))
+        stop = start + lag_steps
+        trajectories[pair_id, ..., 0] = read_frame(data, start, stride)
+        trajectories[pair_id, ..., 1] = read_frame(data, stop, stride)
+        lags[pair_id, 0] = times[stop] - times[start]
+
+    if not np.all(lags > 0):
+        raise ValueError("PDEBench time coordinates must be strictly increasing.")
+    return trajectories, lags
 
 
-def write_split(path: Path, trajectories: np.ndarray, dt: np.ndarray, coordinates: np.ndarray, dtype: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+def coordinates(group: h5py.Group, stride: int) -> np.ndarray:
+    x = np.asarray(group["grid/x"]).squeeze()[::stride]
+    y = np.asarray(group["grid/y"]).squeeze()[::stride]
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    return np.stack((xx, yy), axis=-1)
+
+
+def write_split(
+    path: Path,
+    trajectories: np.ndarray,
+    lags: np.ndarray,
+    coords: np.ndarray,
+    dtype: str,
+) -> None:
     savemat(
         path,
         {
             "trajectories": trajectories.astype(dtype, copy=False),
-            "dt": dt.astype(dtype, copy=False),
-            "coordinates": coordinates.astype(dtype, copy=False),
+            "dt": lags.astype(dtype, copy=False),
+            "coordinates": coords.astype(dtype, copy=False),
         },
         do_compression=True,
     )
@@ -485,145 +150,47 @@ def write_split(path: Path, trajectories: np.ndarray, dt: np.ndarray, coordinate
 
 def main() -> None:
     args = parse_args()
-    global h5py
-    try:
-        import h5py as _h5py
-    except ImportError as exc:  # pragma: no cover - exercised only on lean envs.
-        raise SystemExit(
-            "convert_pdebench_to_osg.py requires h5py to read PDEBench HDF5 files. "
-            "Install it in the active environment, e.g. `pip install h5py` or "
-            "`conda install h5py`, then rerun this script."
-        ) from exc
-    h5py = _h5py
-    train_rng = np.random.default_rng(args.seed)
-    test_rng = np.random.default_rng(args.seed + 1)
+    if args.space_stride < 1:
+        raise ValueError("space-stride must be positive.")
+
     with h5py.File(args.input, "r") as h5:
-        group_keys = numeric_group_keys(h5)
-        use_grouped = args.grouped or (args.data_key is None and group_keys and args.group_data_key in h5[group_keys[0]])
-        if use_grouped:
-            if args.max_trajectories is not None:
-                group_keys = group_keys[: args.max_trajectories]
-            if not group_keys:
-                raise ValueError("No numeric trajectory groups found for --grouped conversion.")
-            train_group_keys, test_group_keys = split_group_keys(group_keys, args)
-            train_data, train_dt, coords, n_time, max_lag = sample_pairs_grouped(
-                h5, train_group_keys, args, args.train_pairs, train_rng
-            )
-            test_data, test_dt, _, _, _ = sample_pairs_grouped(
-                h5, test_group_keys, args, args.test_pairs, test_rng
-            )
-            overlap = sorted(set(train_group_keys).intersection(test_group_keys))
-            disjoint = not overlap
-            if args.train_trajectories is not None and not disjoint:
-                raise RuntimeError("Grouped train/test trajectory split is not disjoint.")
-            data_key = f"<group>/{args.group_data_key}"
-            metadata = {
-                "input": str(args.input),
-                "data_key": data_key,
-                "grouped": True,
-                "n_groups": len(group_keys),
-                "trajectory_split": "disjoint" if args.train_trajectories is not None else "shared_pool",
-                "trajectory_split_seed": args.trajectory_split_seed,
-                "train_trajectory_count": len(train_group_keys),
-                "test_trajectory_count": len(test_group_keys),
-                "train_group_ids": train_group_keys,
-                "test_group_ids": test_group_keys,
-                "train_test_group_overlap": overlap,
-                "train_test_groups_disjoint": disjoint,
-                "pair_sampling": "balanced_by_trajectory",
-                "layout": args.layout,
-                "problem_dim": args.problem_dim,
-                "component": args.component,
-                "train_pairs": args.train_pairs,
-                "test_pairs": args.test_pairs,
-                "min_lag_steps": args.min_lag_steps,
-                "max_lag_steps": max_lag,
-                "time_stride": args.time_stride,
-                "space_stride": args.space_stride,
-                "pair_seed_train": args.seed,
-                "pair_seed_test": args.seed + 1,
-                "trajectories_shape_train": list(train_data.shape),
-                "trajectories_shape_test": list(test_data.shape),
-                "coordinates_shape": list(coords.shape),
-                "dt_min": float(min(train_dt.min(), test_dt.min())),
-                "dt_max": float(max(train_dt.max(), test_dt.max())),
-            }
-            train_path = args.output_dir / f"{args.prefix}_train.mat"
-            test_path = args.output_dir / f"{args.prefix}_test.mat"
-            print(json.dumps(metadata, indent=2))
-            print(f"train -> {train_path}")
-            print(f"test  -> {test_path}")
-            if args.dry_run:
-                return
-            write_split(train_path, train_data, train_dt, coords, args.dtype)
-            write_split(test_path, test_data, test_dt, coords, args.dtype)
-            meta_path = args.output_dir / f"{args.prefix}_metadata.json"
-            meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-            print(f"meta  -> {meta_path}")
-            return
+        groups = numeric_groups(h5)
+        train_groups, test_groups = split_trajectories(
+            groups, args.train_trajectories, args.test_trajectories, args.split_seed
+        )
+        train, train_dt = sample_pairs(
+            h5,
+            train_groups,
+            args.train_pairs,
+            args.min_lag_steps,
+            args.max_lag_steps,
+            args.space_stride,
+            args.data_key,
+            np.random.default_rng(args.pair_seed),
+        )
+        test, test_dt = sample_pairs(
+            h5,
+            test_groups,
+            args.test_pairs,
+            args.min_lag_steps,
+            args.max_lag_steps,
+            args.space_stride,
+            args.data_key,
+            np.random.default_rng(args.pair_seed + 1),
+        )
+        coords = coordinates(h5[train_groups[0]], args.space_stride)
 
-        data_key = pick_key(h5, args.data_key, DEFAULT_DATA_KEYS, min_ndim=3)
-        raw = np.asarray(h5[data_key])
-        data = normalize_to_osg_layout(raw, args.problem_dim, args.component, args.layout)
-        data = data[..., :: args.time_stride]
-        data = downsample(data, args.problem_dim, args.space_stride)
-        n_time = data.shape[-1]
-        time_key = args.time_key
-        if time_key is None:
-            for candidate in DEFAULT_TIME_KEYS:
-                if candidate in h5:
-                    time_key = candidate
-                    break
-        if time_key is None:
-            times = np.arange(n_time, dtype=np.float64)
-        else:
-            times = np.asarray(h5[time_key]).squeeze().astype(np.float64)
-            times = times[:: args.time_stride][:n_time]
-        coords = make_coordinates(h5, args.problem_dim, data.shape, args)
+    if train.shape[1:3] != coords.shape[:2] or test.shape[1:3] != coords.shape[:2]:
+        raise ValueError("Spatial coordinates do not match the converted fields.")
 
-    max_lag = args.max_lag_steps or (n_time - 1)
-    if args.train_trajectories is not None or args.test_trajectories is not None:
-        raise ValueError("Trajectory-disjoint splitting currently requires grouped PDEBench input.")
-    train_data, train_dt = sample_pairs(
-        data, times, args.train_pairs, args.min_lag_steps, max_lag, train_rng, args.problem_dim
-    )
-    test_data, test_dt = sample_pairs(
-        data, times, args.test_pairs, args.min_lag_steps, max_lag, test_rng, args.problem_dim
-    )
-
+    args.output_dir.mkdir(parents=True, exist_ok=True)
     train_path = args.output_dir / f"{args.prefix}_train.mat"
     test_path = args.output_dir / f"{args.prefix}_test.mat"
-    metadata = {
-        "input": str(args.input),
-        "data_key": data_key,
-        "layout": args.layout,
-        "problem_dim": args.problem_dim,
-        "component": args.component,
-        "train_pairs": args.train_pairs,
-        "test_pairs": args.test_pairs,
-        "min_lag_steps": args.min_lag_steps,
-        "max_lag_steps": max_lag,
-        "time_stride": args.time_stride,
-        "space_stride": args.space_stride,
-        "pair_seed_train": args.seed,
-        "pair_seed_test": args.seed + 1,
-        "trajectories_shape_train": list(train_data.shape),
-        "trajectories_shape_test": list(test_data.shape),
-        "coordinates_shape": list(coords.shape),
-        "dt_min": float(min(train_dt.min(), test_dt.min())),
-        "dt_max": float(max(train_dt.max(), test_dt.max())),
-    }
+    write_split(train_path, train, train_dt, coords, args.dtype)
+    write_split(test_path, test, test_dt, coords, args.dtype)
 
-    print(json.dumps(metadata, indent=2))
-    print(f"train -> {train_path}")
-    print(f"test  -> {test_path}")
-    if args.dry_run:
-        return
-    write_split(train_path, train_data, train_dt, coords, args.dtype)
-    write_split(test_path, test_data, test_dt, coords, args.dtype)
-    meta_path = args.output_dir / f"{args.prefix}_metadata.json"
-    meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-    print(f"meta  -> {meta_path}")
+    print(f"train: {train_path}, trajectories={train.shape}, dt={train_dt.min():.6g}..{train_dt.max():.6g}")
+    print(f"test:  {test_path}, trajectories={test.shape}, dt={test_dt.min():.6g}..{test_dt.max():.6g}")
 
 
 if __name__ == "__main__":

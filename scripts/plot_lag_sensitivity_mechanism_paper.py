@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import csv
 from pathlib import Path
 
@@ -8,8 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-ROOT = Path("eval_outputs_lag_sensitivity")
-OUT = Path("paper_figures")
 SEEDS = range(5)
 STAGES = ("block0_preactivation", "decoder")
 MODELS = ("Direct-lag OSG-FNO", "FiLM-OSG-FNO")
@@ -26,11 +25,11 @@ def read_rows(path: Path):
         return list(csv.DictReader(handle))
 
 
-def load_spectra(prefix: str, suffix: str):
+def load_spectra(root: Path, prefix: str, suffix: str):
     values = {stage: {model: [] for model in MODELS} for stage in STAGES}
     wavenumbers = {}
     for seed in SEEDS:
-        rows = read_rows(ROOT / f"{prefix}{seed}{suffix}" / "lag_sensitivity_spectrum.csv")
+        rows = read_rows(root / f"{prefix}{seed}{suffix}" / "lag_sensitivity_spectrum.csv")
         for stage in STAGES:
             selected = [row for row in rows if row["stage"] == stage]
             selected.sort(key=lambda row: int(row["wavenumber"]))
@@ -44,6 +43,11 @@ def load_spectra(prefix: str, suffix: str):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Plot the five-seed lag-sensitivity spectra.")
+    parser.add_argument("--input-dir", type=Path, default=Path("eval_outputs_lag_sensitivity"))
+    parser.add_argument("--output-dir", type=Path, default=Path("paper_figures"))
+    args = parser.parse_args()
+
     plt.rcParams.update(
         {
             "font.family": "serif",
@@ -62,7 +66,7 @@ def main():
 
     fig, axes = plt.subplots(3, 2, figsize=(7.25, 7.85), sharey=True)
     for row_index, (name, prefix, suffix, band_end) in enumerate(BENCHMARKS):
-        wavenumbers, spectra = load_spectra(prefix, suffix)
+        wavenumbers, spectra = load_spectra(args.input_dir, prefix, suffix)
         for column_index, stage in enumerate(STAGES):
             ax = axes[row_index, column_index]
             for model in MODELS:
@@ -126,9 +130,9 @@ def main():
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 0.992))
     fig.subplots_adjust(left=0.135, right=0.992, bottom=0.062, top=0.905, hspace=0.43, wspace=0.15)
-    OUT.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT / "lag_sensitivity_mechanism_5seed.pdf", bbox_inches="tight")
-    fig.savefig(OUT / "lag_sensitivity_mechanism_5seed.png", dpi=300, bbox_inches="tight")
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(args.output_dir / "lag_sensitivity_mechanism_5seed.pdf", bbox_inches="tight")
+    fig.savefig(args.output_dir / "lag_sensitivity_mechanism_5seed.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
 
 
