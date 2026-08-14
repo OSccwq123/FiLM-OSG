@@ -6,7 +6,7 @@ package.
 
 ## Tested Environment
 
-Smoke tests were run with:
+The code was tested with:
 
 - Python `3.11.14`
 - PyTorch `2.0.1`
@@ -29,7 +29,7 @@ conda create -n film_osg_clean python=3.11 -y
 conda activate film_osg_clean
 ```
 
-Install PyTorch. The smoke-tested setup used CUDA 11.7 wheels:
+Install PyTorch. The tested setup used CUDA 11.7 wheels:
 
 ```bash
 python -m pip install torch==2.0.1+cu117 --index-url https://download.pytorch.org/whl/cu117
@@ -65,10 +65,10 @@ python eval/eval_burgers_fno.py --help
 python profiling/profile_ns_overhead.py --help
 ```
 
-For a short real smoke test when the Burgers `.mat` files are present:
+For a short verification run when the Burgers `.mat` files are present:
 
 ```bash
-python train/run_burgers_fno.py --model fno --seed 0 --epochs 1 --batch-size 100 --tag smoke
-python train/run_burgers_fno.py --model fno_film --seed 0 --epochs 1 --batch-size 100 --tag smoke
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag smoke --eval-steps 1 --save-dir eval_outputs_burgers_smoke
+python train/run_burgers_fno.py --model fno --seed 0 --epochs 1 --batch-size 100 --tag verification
+python train/run_burgers_fno.py --model fno_film --seed 0 --epochs 1 --batch-size 100 --tag verification
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag verification --eval-steps 1 --save-dir eval_outputs_burgers_verification
 ```
