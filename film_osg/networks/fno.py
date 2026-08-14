@@ -1,10 +1,15 @@
 """Fourier neural operator backbones used in the FiLM-OSG experiments.
 
-Portions of this module are adapted from the DUE project:
+This file is derived from AI4Equations/DUE:
 https://github.com/AI4Equations/due
-DUE is distributed under the LGPL-2.1 license. The Fourier neural operator
-implementation also follows the public neuraloperator reference:
-https://github.com/neuraloperator/neuraloperator/blob/master/fourier_2d_time.py
+It was modified for FiLM-OSG in 2026; individual change dates are recorded in
+the Git history. This file is distributed under the GNU LGPL v2.1; see
+THIRD_PARTY_LICENSES/DUE-LGPL-2.1.txt.
+
+The FNO implementation also follows the neuraloperator reference implementation
+distributed under the MIT License:
+https://github.com/neuraloperator/neuraloperator
+See THIRD_PARTY_LICENSES/NEURALOPERATOR-MIT.txt.
 """
 
 import torch

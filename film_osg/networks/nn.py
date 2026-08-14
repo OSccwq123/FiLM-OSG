@@ -1,9 +1,10 @@
 """Base neural-network utilities for FiLM-OSG reproducibility experiments.
 
-Portions of this module are adapted from the DUE project:
+This file is derived from AI4Equations/DUE:
 https://github.com/AI4Equations/due
-DUE is distributed under the LGPL-2.1 license. Local changes here preserve the
-DUE-style base API used by the reproduced OSG/FiLM-OSG models.
+It was modified for FiLM-OSG in 2026; individual change dates are recorded in
+the Git history. This file is distributed under the GNU LGPL v2.1; see
+THIRD_PARTY_LICENSES/DUE-LGPL-2.1.txt.
 """
 
 import torch

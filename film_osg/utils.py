@@ -1,8 +1,10 @@
 """Training utilities used by the FiLM-OSG models.
 
-Portions of this module are adapted from the DUE project:
+This file is derived from AI4Equations/DUE:
 https://github.com/AI4Equations/due
-DUE is distributed under the LGPL-2.1 license.
+It was modified for FiLM-OSG in 2026; individual change dates are recorded in
+the Git history. This file is distributed under the GNU LGPL v2.1; see
+THIRD_PARTY_LICENSES/DUE-LGPL-2.1.txt.
 """
 
 import torch

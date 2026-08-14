@@ -1,8 +1,10 @@
 FiLM-OSG
 ========
 
-The following modules contain code adapted from
-AI4Equations/DUE (LGPL-2.1):
+The files listed below are derived from AI4Equations/DUE and contain
+modifications made for FiLM-OSG in 2026. Individual change dates are recorded
+in the Git history. These files are distributed under the GNU Lesser General
+Public License v2.1:
 
     film_osg/datasets/pde.py
     film_osg/models/pde.py
@@ -14,8 +16,8 @@ AI4Equations/DUE (LGPL-2.1):
 Upstream: https://github.com/AI4Equations/due
 License text: `THIRD_PARTY_LICENSES/DUE-LGPL-2.1.txt`
 
-The FNO implementation also follows the neuraloperator reference
-implementation (MIT):
+The FNO implementation in `film_osg/networks/fno.py` also follows the
+neuraloperator reference implementation distributed under the MIT License:
 
     https://github.com/neuraloperator/neuraloperator
 
