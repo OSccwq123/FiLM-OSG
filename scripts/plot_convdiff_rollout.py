@@ -21,7 +21,9 @@ def prediction_file(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--direct", type=Path, required=True, help="Saved direct-lag prediction .mat file.")
+    parser.add_argument(
+        "--direct", type=Path, required=True, help="Saved input-concatenation prediction .mat file."
+    )
     parser.add_argument("--film", type=Path, required=True, help="Saved FiLM prediction .mat file.")
     parser.add_argument("--case", type=int, default=0)
     parser.add_argument("--steps", default="10,20")
@@ -42,7 +44,7 @@ def main():
         raise ValueError(f"Case must lie between 0 and {truth.shape[0] - 1}.")
 
     fields = (truth, direct, film)
-    titles = ("Reference", "Direct-lag OSG-FNO", "FiLM-OSG-FNO")
+    titles = ("Reference", "Input-concatenation OSG-FNO", "FiLM-OSG-FNO")
     fig, axes = plt.subplots(len(steps), 3, figsize=(9.2, 2.8 * len(steps)), squeeze=False)
 
     for row, step in enumerate(steps):

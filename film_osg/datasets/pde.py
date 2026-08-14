@@ -116,7 +116,7 @@ class pde_dataset_osg():
             return target_X.astype(self.dtype), target_Y.astype(self.dtype), coords.astype(self.dtype), data.astype(self.dtype), dt.astype(self.dtype), vmin.astype(self.dtype), vmax.astype(self.dtype), tmin.astype(self.dtype), tmax.astype(self.dtype), cmin.astype(self.dtype), cmax.astype(self.dtype)
 
     def normalize(self, data, dt, coords):
-        """Scale states, lags, and coordinates to the interval [-1, 1]."""
+        """Scale states, time intervals, and coordinates to [-1, 1]."""
         axes = tuple(np.delete(np.arange(len(data.shape)), [-2]))
         vmax = np.max(data, axis=axes, keepdims=True)
         vmin = np.min(data, axis=axes, keepdims=True)
@@ -135,109 +135,3 @@ class pde_dataset_osg():
         coords = 2 * (coords - 0.5 * (cmax + cmin)) / (cmax - cmin)
         coords = np.clip(coords, -1, 1)
         return data, dt, coords, vmin, vmax, tmin, tmax, cmin, cmax
-
-
-class pde_dataset():
-    """
-    A class representing a PDE dataset.
-    """
-
-    def __init__(self, config):
-        self.problem_type = config["problem_type"]
-        self.memory_steps = config["memory"]
-        self.multi_steps = config["multi_steps"]
-        self.nbursts = config["nbursts"]
-        self.dtype = config["dtype"]
-
-        assert self.memory_steps >= 0
-
-    def load(self, file_path_train, file_path_test):
-        try:
-            data = loadmat(file_path_train)
-            try:
-                coords = data["coordinates"]
-                data = data["trajectories"]
-            except Exception:
-                raise ValueError("Please name your dataset as trajectories.")
-        except NotImplementedError:
-            print("Your mat file is too large. Be patient.")
-            import h5py
-            with h5py.File(file_path_train, "r") as f:
-                try:
-                    coords = f["coordinates"][:].T
-                    data = f["trajectories"][:].T
-                except Exception:
-                    raise ValueError("Please name your dataset as trajectories.")
-
-        print(data.shape, coords.shape)
-        assert len(data.shape) >= 4
-
-        if self.problem_type == "1d_regular":
-            N = data.shape[0]
-            L = data.shape[1]
-            assert coords.shape == (L,) or coords.shape == (L, 1) or coords.shape == (1, L)
-            coords = coords.reshape(L, 1)
-            D = data.shape[2]
-            T = data.shape[3]
-            print("One-dimensional regular dataset loaded, {} trajectories, {} grid points, {} variables, {} time instances".format(N, L, D, T))
-        elif self.problem_type == "2d_regular":
-            N = data.shape[0]
-            H = data.shape[1]
-            W = data.shape[2]
-            assert coords.shape == (H, W, 2)
-            D = data.shape[3]
-            T = data.shape[4]
-            print("Two-dimensional regular dataset loaded, {} trajectories, {} rows, {} columns, {} variables, {} time instances".format(N, H, W, D, T))
-        elif self.problem_type == "1d_irregular":
-            N = data.shape[0]
-            L = data.shape[1]
-            assert coords.shape == (L,) or coords.shape == (L, 1) or coords.shape == (1, L)
-            coords = coords.reshape(L, 1)
-            D = data.shape[2]
-            T = data.shape[3]
-            print("One-dimensional irregular dataset loaded, {} trajectories, {} collocation points, {} variables, {} time instances".format(N, L, D, T))
-        elif self.problem_type == "2d_irregular":
-            N = data.shape[0]
-            L = data.shape[1]
-            assert coords.shape == (L, 2)
-            D = data.shape[2]
-            T = data.shape[3]
-            print("Two-dimensional irregular dataset loaded, {} trajectories, {} collocation points, {} variables, {} time instances".format(N, L, D, T))
-        else:
-            raise ValueError("1D and 2D data collected on either uniform grids or unstructured meshes are supported. Make sure that your dataset is correctly organized. 3D problems are not yet supported")
-
-        max_windows = T - self.memory_steps - self.multi_steps
-        assert max_windows > 0, (
-            f"Time steps T={T} is too small for memory_steps "
-            f"{self.memory_steps} and multi_steps {self.multi_steps}"
-        )
-
-        if self.nbursts > max_windows:
-            print(f"Reducing nbursts from {self.nbursts} to {max_windows} (time steps limit)")
-            self.nbursts = max_windows
-
-        if self.problem_type in ["1d_regular", "1d_irregular", "2d_irregular"]:
-            trainX = np.zeros((N * self.nbursts, L, D, self.memory_steps + 1))
-            trainY = np.zeros((N * self.nbursts, L, D, self.multi_steps))
-        else:
-            trainX = np.zeros((N * self.nbursts, H, W, D, self.memory_steps + 1))
-            trainY = np.zeros((N * self.nbursts, H, W, D, self.multi_steps))
-
-        for i in range(N):
-            if self.nbursts < max_windows:
-                inits = np.random.randint(0, max_windows, self.nbursts)
-            else:
-                inits = np.arange(max_windows)
-
-            trainX[i * self.nbursts:(i + 1) * self.nbursts] = np.stack([data[i, ..., t:t + self.memory_steps + 1] for t in inits])
-            trainY[i * self.nbursts:(i + 1) * self.nbursts] = np.stack([data[i, ..., t + self.memory_steps + 1:t + self.memory_steps + self.multi_steps + 1] for t in inits])
-
-        print(f"Input shape (N,L,D,M+1): {trainX.shape}")
-        print(f"Output shape (N,L,D,S): {trainY.shape}")
-
-        if file_path_test is None:
-            return trainX.astype(self.dtype), trainY.astype(self.dtype), coords.astype(self.dtype)
-        else:
-            data_test = loadmat(file_path_test)
-            data_test = data_test["trajectories"]
-            return trainX.astype(self.dtype), trainY.astype(self.dtype), coords.astype(self.dtype), data_test.astype(self.dtype)

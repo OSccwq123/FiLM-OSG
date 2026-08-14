@@ -6,7 +6,7 @@
 %
 % Each .mat file contains:
 %   coordinates: coarse spatial grid, shape (64, 1)
-%   dt:          variable lag intervals
+%   dt:          varying time intervals
 %   trajectories: state snapshots, shape (N, 64, 1, T)
 %
 clear; clc;

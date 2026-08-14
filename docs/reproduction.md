@@ -1,221 +1,251 @@
 # Reproducing the FiLM-OSG experiments
 
-Run all commands from the repository root. The examples below use seed 0;
-repeat matched experiments with seeds `0,1,2,3,4` for the five-seed summaries.
-Tags identify checkpoints and must agree between training and evaluation.
-Training commands do not replace an existing run directory unless
-`--overwrite` is supplied.
+Run the commands below from the repository root. Training tags are arbitrary
+identifiers, but the same tag must be passed to the corresponding evaluator.
+The reported comparisons use seeds `0,1,2,3,4`, except for the U-NO-style and
+Transolver-style experiments, which use seeds `0,1,2`. Replace `0,1` in the
+launcher commands with the GPU ids available on the local machine.
 
-## Burgers
+The evaluation programs write a seed-wise CSV, a mean-and-standard-deviation
+CSV, and a paired-comparison CSV. These files contain the scalar values used in
+the manuscript tables.
 
-Original benchmark:
+## Data
 
-```bash
-python train/run_burgers_fno.py --model fno --seed 0 --tag original_burgers_core --dataset original --data-dir data --epochs 1000
-python train/run_burgers_fno.py --model fno_film --seed 0 --tag original_burgers_core --dataset original --data-dir data --epochs 1000
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag original_burgers_core --dataset original --data-dir data --save-dir eval_outputs_burgers_original_seed0
-```
+### Burgers and advection--diffusion
 
-To run the five matched seeds across two GPUs and evaluate them together:
-
-```bash
-python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag original_burgers_core --dataset original --data-dir data
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag original_burgers_core --dataset original --data-dir data --save-dir eval_outputs_burgers_original_5seed
-```
-
-The rollout figure for the final test trajectory is generated from a matched
-checkpoint pair by
-
-```bash
-python scripts/plot_burgers_rollout.py --direct-model runs_burgers_fno_seed2_original_burgers_core/model --film-model runs_burgers_fno_film_seed2_original_burgers_core/model --data data/BurgersOSG_test.mat --sample -1 --steps 6,20 --out paper_figures/burgers_rollout.pdf
-```
-
-Additional data with steep gradients:
-
-```bash
-python train/run_burgers_fno.py --model fno --seed 0 --tag burgers_sharp_core --dataset sharp --data-dir data/burgers_sharp --epochs 1000
-python train/run_burgers_fno.py --model fno_film --seed 0 --tag burgers_sharp_core --dataset sharp --data-dir data/burgers_sharp --epochs 1000
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag burgers_sharp_core --dataset sharp --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_seed0
-```
-
-Mean-zero projection:
-
-```bash
-python train/run_burgers_fno.py --model fno --seed 0 --tag burgers_sharp_projection --dataset sharp --data-dir data/burgers_sharp --epochs 1000 --conserve-mean
-python train/run_burgers_fno.py --model fno_film --seed 0 --tag burgers_sharp_projection --dataset sharp --data-dir data/burgers_sharp --epochs 1000 --conserve-mean
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0 --tag burgers_sharp_projection --dataset sharp --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_projection_seed0
-```
-
-Global--local models with mean-zero projection:
-
-```bash
-python train/run_burgers_fno.py --model gl_fno --seed 0 --tag burgers_sharp_gl_direct_proj --dataset sharp --data-dir data/burgers_sharp --epochs 1000 --conserve-mean
-python eval/eval_burgers_fno.py --models gl_fno --seeds 0 --tag burgers_sharp_gl_direct_proj --dataset sharp --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_gl_direct_seed0
-
-python train/run_burgers_fno.py --model gl_fno_film --seed 0 --tag burgers_sharp_gl_global_proj --dataset sharp --data-dir data/burgers_sharp --epochs 1000 --conserve-mean --gl-film-mode global_only
-python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0 --tag burgers_sharp_gl_global_proj --dataset sharp --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_gl_global_seed0
-
-python train/run_burgers_fno.py --model gl_fno_film --seed 0 --tag burgers_sharp_gl_branchwise_proj --dataset sharp --data-dir data/burgers_sharp --epochs 1000 --conserve-mean --gl-film-mode branchwise
-python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0 --tag burgers_sharp_gl_branchwise_proj --dataset sharp --data-dir data/burgers_sharp --save-dir eval_outputs_burgers_sharp_gl_seed0
-```
-
-## Advection--diffusion
-
-The matched comparison uses mean-zero projection for both models:
-
-```bash
-python scripts/launch_convdiff_fno.py --gpus 0,1 --tag ad_shared_projection --data-dir data --conserve-mean
-python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_shared_projection --data-dir data --save-dir eval_outputs_ad
-```
-
-To save two seed-0 rollouts and generate the same field-panel layout:
-
-```bash
-python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0 --tag ad_shared_projection --data-dir data --save-dir eval_outputs_ad_seed0 --save-mat
-python scripts/plot_convdiff_rollout.py \
-  --direct eval_outputs_ad_seed0/fno_seed0_ad_shared_projection_full_predictions.mat \
-  --film eval_outputs_ad_seed0/fno_film_seed0_ad_shared_projection_full_predictions.mat \
-  --output figures/convdiff_rollout.pdf
-```
-
-Fixed-lag test sets outside the training interval `[0.005, 0.5]` are generated
-and evaluated with:
+The MATLAB programs write to `data/` when `FILM_OSG_OUTPUT_DIR` is set:
 
 ```matlab
 setenv('FILM_OSG_OUTPUT_DIR', fullfile(pwd, 'data'))
-run('scripts/data_generation/convection_diffusion_fixed_lag_extrapolation.m')
+run('scripts/data_generation/Burgers.m')
+run('scripts/data_generation/convection_diffusion.m')
+```
+
+The additional Burgers data with steep gradients are generated by
+
+```bash
+python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+python scripts/data_generation/check_osg_mat_data.py --train data/burgers_sharp/BurgersSharpOSG_train.mat --test data/burgers_sharp/BurgersSharpOSG_test.mat --problem-dim 1d --expected-channels 1 --require-positive-dt
+```
+
+The Navier--Stokes experiments use `VorticityOSG_train.mat` and
+`VorticityOSG_test.mat` from the public DUE benchmark. Place both files in
+`data/`.
+
+### PDEBench-derived data
+
+Download `2D_rdb_NA_NA.h5` and `2D_diff-react_NA_NA.h5` from the
+[PDEBench archive](https://doi.org/10.18419/darus-2986) and place them at
+
+```text
+data/pdebench_raw/swe/2D_rdb_NA_NA.h5
+data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5
+```
+
+The following commands reproduce the trajectory-disjoint conversion used in
+the manuscript. The same split and pair seeds are used at both
+reaction--diffusion resolutions.
+
+```bash
+python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 --output-dir data/pdebench_osg/swe64 --prefix PDEBenchSWE64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
+python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/swe64/PDEBenchSWE64_train.mat --test data/pdebench_osg/swe64/PDEBenchSWE64_test.mat --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchSWE64_train.mat data/pdebench_osg/swe64/train_data.mat
+ln -sfn PDEBenchSWE64_test.mat data/pdebench_osg/swe64/test_data.mat
+
+python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff64 --prefix PDEBenchReacDiff64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
+python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_train.mat --test data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchReacDiff64_train.mat data/pdebench_osg/reacdiff64/train_data.mat
+ln -sfn PDEBenchReacDiff64_test.mat data/pdebench_osg/reacdiff64/test_data.mat
+
+python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff128 --prefix PDEBenchReacDiff128 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 1 --split-seed 0 --pair-seed 0
+python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_train.mat --test data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+ln -sfn PDEBenchReacDiff128_train.mat data/pdebench_osg/reacdiff128/train_data.mat
+ln -sfn PDEBenchReacDiff128_test.mat data/pdebench_osg/reacdiff128/test_data.mat
+```
+
+On systems without symbolic links, copy each generated file to the indicated
+`train_data.mat` or `test_data.mat` name instead.
+
+## Main matched comparisons
+
+### Burgers
+
+```bash
+python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_main --dataset original --data-dir data
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_main --dataset original --data-dir data --save-dir results/burgers_main
+python scripts/plot_burgers_rollout.py --direct-model runs_burgers_fno_seed2_burgers_main/model --film-model runs_burgers_fno_film_seed2_burgers_main/model --data data/BurgersOSG_test.mat --sample -1 --steps 6,20 --out paper_figures/burgers_rollout.pdf
+```
+
+### Advection--diffusion
+
+Both models use the mean-zero increment projection in this comparison.
+
+```bash
+python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_main --data-dir data --conserve-mean
+python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_main --data-dir data --save-dir results/ad_main
+python eval/eval_convdiff_fno.py --models fno,fno_film --seeds 0 --tag ad_main --data-dir data --save-dir results/ad_figure --save-mat
+python scripts/plot_convdiff_rollout.py --direct results/ad_figure/fno_seed0_ad_main_full_predictions.mat --film results/ad_figure/fno_film_seed0_ad_main_full_predictions.mat --output paper_figures/convdiff_rollout.pdf
+```
+
+### Navier--Stokes
+
+```bash
+python scripts/launch_ns_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_main --data-dir data
+python eval/eval_ns_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_main --data-dir data --save-dir results/ns_main
+python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_main --data-dir data --save-dir results/ns_figure --save-mat
+python scripts/plot_ns_rollout.py --direct results/ns_figure/fno_seed0_ns_main_full_predictions.mat --film results/ns_figure/fno_film_seed0_ns_main_full_predictions.mat --output-dir paper_figures/ns
+```
+
+## Additional Burgers experiments
+
+The first comparison uses the steep-gradient data without projection; the
+second applies the mean-zero increment projection to both models.
+
+```bash
+python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_sharp --dataset sharp --data-dir data/burgers_sharp
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_sharp --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_sharp
+
+python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_sharp_projection --dataset sharp --data-dir data/burgers_sharp --conserve-mean
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_sharp_projection --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_sharp_projection
+```
+
+The global--local table uses four separately trained configurations. All use
+the projection. The HF/HF-SG run uses weights `0.01` and `0.001` with a 10%
+warm-up.
+
+```bash
+python scripts/launch_burgers_fno.py --gpus 0,1 --models gl_fno --seeds 0,1,2,3,4 --tag burgers_gl_input --dataset sharp --data-dir data/burgers_sharp --conserve-mean
+python scripts/launch_burgers_fno.py --gpus 0,1 --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_global --dataset sharp --data-dir data/burgers_sharp --conserve-mean --gl-film-mode global_only
+python scripts/launch_burgers_fno.py --gpus 0,1 --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_branchwise --dataset sharp --data-dir data/burgers_sharp --conserve-mean --gl-film-mode branchwise
+python scripts/launch_burgers_fno.py --gpus 0,1 --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_branchwise_hf --dataset sharp --data-dir data/burgers_sharp --conserve-mean --gl-film-mode branchwise --hf-weight 0.01 --hf-sg-weight 0.001 --hf-warmup-frac 0.1
+
+python eval/eval_burgers_fno.py --models gl_fno --seeds 0,1,2,3,4 --tag burgers_gl_input --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_gl_input
+python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_global --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_gl_global
+python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_branchwise --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_gl_branchwise
+python eval/eval_burgers_fno.py --models gl_fno_film --seeds 0,1,2,3,4 --tag burgers_gl_branchwise_hf --dataset sharp --data-dir data/burgers_sharp --save-dir results/burgers_gl_branchwise_hf
+```
+
+## Fixed-time advection--diffusion evaluation
+
+Generate the three test sets at `0.0025`, `0.75`, and `1.0`, then evaluate the
+models from the main advection--diffusion experiment without retraining.
+
+```matlab
+setenv('FILM_OSG_OUTPUT_DIR', fullfile(pwd, 'data'))
+run('scripts/data_generation/convection_diffusion_fixed_time.m')
 ```
 
 ```bash
-python eval/eval_convdiff_lag_extrapolation.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_shared_projection --data-dir data
+python eval/eval_convdiff_fixed_time.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ad_main --data-dir data --save-dir results/ad_fixed_time
 ```
 
-## Navier--Stokes
+## Navier--Stokes diagnostics
 
-Main comparison:
+The partition experiment evaluates the main checkpoints at terminal times
+`20,40,60,80` using the shared set of admissible partitions from the paper.
 
 ```bash
-python scripts/launch_ns_fno.py --gpus 0,1 --tag ns_core --data-dir data
-python eval/eval_ns_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_core --data-dir data --save-dir eval_outputs_ns
+python eval/eval_ns_partition_robustness_paper.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_main --model-root . --data-dir data --save-dir results/ns_partitions
 ```
 
-Vorticity, relative-error, and enstrophy panels can be generated by
+The input-concatenation tuning table contains the main width-20,
+learning-rate-`1e-3` run above and the following three five-seed runs:
 
 ```bash
-python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_core --data-dir data --save-dir eval_outputs_ns_seed0 --save-mat
-python scripts/plot_ns_rollout.py \
-  --direct eval_outputs_ns_seed0/fno_seed0_ns_core_full_predictions.mat \
-  --film eval_outputs_ns_seed0/fno_film_seed0_ns_core_full_predictions.mat \
-  --output-dir figures/ns
+python scripts/launch_ns_fno.py --gpus 0,1 --models fno --seeds 0,1,2,3,4 --tag ns_input_lr2e3 --data-dir data --learning-rate 2e-3
+python scripts/launch_ns_fno.py --gpus 0,1 --models fno --seeds 0,1,2,3,4 --tag ns_input_lr5e4 --data-dir data --learning-rate 5e-4
+python scripts/launch_ns_fno.py --gpus 0,1 --models fno --seeds 0,1,2,3,4 --tag ns_input_width32 --data-dir data --width 32
+python eval/eval_ns_fno.py --models fno --seeds 0,1,2,3,4 --tag ns_input_lr2e3 --data-dir data --save-dir results/ns_input_lr2e3
+python eval/eval_ns_fno.py --models fno --seeds 0,1,2,3,4 --tag ns_input_lr5e4 --data-dir data --save-dir results/ns_input_lr5e4
+python eval/eval_ns_fno.py --models fno --seeds 0,1,2,3,4 --tag ns_input_width32 --data-dir data --save-dir results/ns_input_width32
 ```
 
-Use `--case` in either plotting script to select the trajectory shown in a
-particular manuscript revision.
-
-Mean-zero projection diagnostic:
+The projection appendix uses a separate matched five-seed training run:
 
 ```bash
-python train/train_ns_one.py --model fno --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
-python train/train_ns_one.py --model fno_film --seed 0 --tag ns_projection_probe --data-dir data --epochs 500 --conserve-mean
-python eval/eval_ns_fno.py --models fno,fno_film --seeds 0 --tag ns_projection_probe --data-dir data --save-dir eval_outputs_ns_projection_seed0 --mean-drift
+python scripts/launch_ns_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_projection --data-dir data --conserve-mean
+python eval/eval_ns_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_projection --data-dir data --save-dir results/ns_projection --mean-drift
 ```
 
-The manuscript partition-robustness diagnostic uses the same fixed collection
-of admissible partitions for every model and seed:
+## Spectral response to the evolution time
+
+This diagnostic evaluates the trained checkpoints and does not retrain them.
+It is run once per seed for each main benchmark.
 
 ```bash
-python eval/eval_ns_partition_robustness_paper.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_core --model-root . --data-dir data --save-dir eval_outputs_ns_partition
+for model_seed in 0 1 2 3 4; do
+  python eval/eval_evolution_time_sensitivity.py --benchmark original_burgers --model-seed "$model_seed" --direct-model "runs_burgers_fno_seed${model_seed}_burgers_main/model" --film-model "runs_burgers_fno_film_seed${model_seed}_burgers_main/model" --data data/BurgersOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir "eval_outputs_evolution_time_sensitivity/burgers_original_seed${model_seed}_layerwise"
+  python eval/eval_evolution_time_sensitivity.py --benchmark advection_diffusion --model-seed "$model_seed" --direct-model "runs_convdiff_fno_seed${model_seed}_ad_main/model" --film-model "runs_convdiff_fno_film_seed${model_seed}_ad_main/model" --data data/test_data.mat --samples 200 --fd-eps 0.01 --out-dir "eval_outputs_evolution_time_sensitivity/ad_seed${model_seed}_layerwise"
+  python eval/eval_evolution_time_sensitivity.py --benchmark navier_stokes --model-seed "$model_seed" --direct-model "runs_ns_fno_seed${model_seed}_ns_main/model" --film-model "runs_ns_fno_film_seed${model_seed}_ns_main/model" --data data/VorticityOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir "eval_outputs_evolution_time_sensitivity/ns_seed${model_seed}_layerwise"
+done
+
+python scripts/summarize_evolution_time_sensitivity.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_evolution_time_sensitivity/burgers_original_5seed_summary
+python scripts/summarize_evolution_time_sensitivity.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ad_5seed_summary
+python scripts/summarize_evolution_time_sensitivity.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ns_5seed_summary
+python scripts/summarize_evolution_time_sensitivity_scalars.py --root eval_outputs_evolution_time_sensitivity --seeds 0,1,2,3,4 --out-dir eval_outputs_evolution_time_sensitivity/scalar_summary
+python scripts/plot_evolution_time_sensitivity.py --input-dir eval_outputs_evolution_time_sensitivity --output-dir paper_figures
 ```
 
-An additional equal-partition diagnostic uses `1,2,4,8` substeps:
+The scalar summary command produces CSV, Markdown, and LaTeX outputs. In
+particular, `nonzero_fraction_low_band_mean` gives the values quoted in the
+spectral-response discussion.
+
+## PDEBench-derived comparisons
+
+The `64 x 64` experiments use batch size 100 and include the two direct-time
+controls. The `128 x 128` experiment uses batch size 20 and compares only the
+two OSG models.
 
 ```bash
-python eval/eval_ns_partition_spread.py --models fno,fno_film --seeds 0 --tag ns_core --model-root . --data-dir data --save-dir eval_outputs_ns_equal_partition_seed0
+python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --batch-size 100 --problem-dim 1
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --save-dir results/pdebench_swe64
+
+python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff64 --data-dir data/pdebench_osg/reacdiff64 --batch-size 100 --problem-dim 2
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff64 --data-dir data/pdebench_osg/reacdiff64 --save-dir results/pdebench_reacdiff64
+
+python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff128 --data-dir data/pdebench_osg/reacdiff128 --batch-size 20 --problem-dim 2
+python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff128 --data-dir data/pdebench_osg/reacdiff128 --save-dir results/pdebench_reacdiff128
 ```
 
-## PDEBench-derived checks
-
-Download the PDEBench radial-dam-break and two-dimensional diffusion--reaction
-HDF5 files from the
-[PDEBench archive](https://doi.org/10.18419/darus-2986). The converter uses an
-800/200 trajectory-disjoint split and samples 5,000 training pairs and 1,000
-test pairs with temporal offsets from 1 to 20 stored steps.
-
-For SWE64:
-
-```bash
-python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 --output-dir data/pdebench_osg/swe64_disjoint_full --prefix PDEBenchSWE64DisjointFullOSG --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-lag-steps 1 --max-lag-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
-python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/swe64_disjoint_full/PDEBenchSWE64DisjointFullOSG_train.mat --test data/pdebench_osg/swe64_disjoint_full/PDEBenchSWE64DisjointFullOSG_test.mat --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
-ln -sfn PDEBenchSWE64DisjointFullOSG_train.mat data/pdebench_osg/swe64_disjoint_full/train_data.mat
-ln -sfn PDEBenchSWE64DisjointFullOSG_test.mat data/pdebench_osg/swe64_disjoint_full/test_data.mat
-```
-
-For ReacDiff64, replace the input, output directory, and prefix by
-`reacdiff2d/2D_diff-react_NA_NA.h5`, `reacdiff64_disjoint_full`, and
-`PDEBenchReacDiff64DisjointFullOSG`, and use `--expected-channels 2`. For the
-128-grid version, use `--space-stride 1`.
-
-The converted datasets use the advection--diffusion training entry point. A
-matched seed-0 SWE64 comparison is:
-
-```bash
-python train/run_convdiff_fno.py --model fno --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
-python train/run_convdiff_fno.py --model fno_film --seed 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --epochs 500 --batch-size 100 --learning-rate 1e-3 --sg-weight 1 --modes1 12 --modes2 12 --depth 4 --width 20 --problem-dim 1
-python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film --seeds 0 --tag pdebench_swe64_disjoint_full_seed0 --data-dir data/pdebench_osg/swe64_disjoint_full --save-dir eval_outputs_pdebench_swe64_disjoint_full_seed0
-```
-
-Each converted sample contains one transition, so these are variable-lag
-single-transition tests rather than long-rollout evaluations.
+Each converted sample contains one transition, so the relative errors are
+single-transition quantities rather than long-rollout errors.
 
 ## Other Navier--Stokes backbones
 
-The U-NO-style and Transolver-style comparisons use seeds `0,1,2`:
-
 ```bash
-python scripts/launch_ns_extra_backbones.py --gpus 0,1 --tag ns_extra --data-dir data
-python eval/eval_ns_extra_backbones.py --models uno,uno_film,transolver,transolver_film --seeds 0,1,2 --tag ns_extra --data-dir data --save-dir eval_outputs_ns_extra_backbones
+python scripts/launch_ns_extra_backbones.py --gpus 0,1 --models uno,uno_film,transolver,transolver_film --seeds 0,1,2 --tag ns_other_backbones --data-dir data
+python eval/eval_ns_extra_backbones.py --models uno,uno_film,transolver,transolver_film --seeds 0,1,2 --tag ns_other_backbones --data-dir data --save-dir results/ns_other_backbones
 ```
 
-## Lag-sensitivity diagnostic
+## Computational cost
 
-This diagnostic evaluates existing checkpoints; it does not retrain the
-models. The CSV key `block0_preactivation` denotes the quantity measured before
-the first block activation.
-
-Original Burgers:
+The manuscript timings use an NVIDIA A100-SXM4-40GB, batch size 20, 50 warm-up
+iterations, and 200 timed iterations for the Navier--Stokes comparison.
 
 ```bash
-python eval/eval_lag_sensitivity_spectrum.py --benchmark original_burgers --model-seed 0 --direct-model runs_burgers_fno_seed0_original_burgers_core/model --film-model runs_burgers_fno_film_seed0_original_burgers_core/model --data data/BurgersOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/burgers_original_seed0_layerwise
+python profiling/profile_ns_overhead.py --models fno,fno_film,uno,uno_film,transolver,transolver_film --batch-size 20 --warmup 50 --iters 200 --data-dir data --save-dir results/ns_overhead
+python profiling/profile_gl_overhead.py --cases burgers_sharp --models film,gl_film --warmup 50 --iters 200 --data-dir data/burgers_sharp --save-dir results/burgers_gl_overhead
 ```
 
-Advection--diffusion:
+Timing values depend on the GPU and software environment. Parameter counts do
+not.
 
-```bash
-python eval/eval_lag_sensitivity_spectrum.py --benchmark advection_diffusion --model-seed 0 --direct-model runs_convdiff_fno_seed0_ad_shared_projection/model --film-model runs_convdiff_fno_film_seed0_ad_shared_projection/model --data data/test_data.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/ad_seed0_layerwise
-```
+## Scalar output files
 
-Navier--Stokes:
+No separate manual aggregation step is needed for the error tables. The
+evaluators above write these files directly:
 
-```bash
-python eval/eval_lag_sensitivity_spectrum.py --benchmark navier_stokes --model-seed 0 --direct-model runs_ns_fno_seed0_ns_core/model --film-model runs_ns_fno_film_seed0_ns_core/model --data data/VorticityOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir eval_outputs_lag_sensitivity/ns_seed0_layerwise
-```
+| Experiment | Scalar summaries |
+| --- | --- |
+| Burgers | `burgers_fno_summary_by_model.csv`, `burgers_fno_paired_summary.csv` |
+| Advection--diffusion | `convdiff_fno_summary_by_model.csv`, `convdiff_fno_paired_summary.csv` |
+| Navier--Stokes | `ns_fno_summary_by_model.csv`, `ns_fno_paired_summary.csv` |
+| Fixed-time advection--diffusion | one summary and paired-summary CSV per test file |
+| Partition experiment | `partition_summary_by_model_T.csv`, `partition_paired_summary.csv` |
+| PDEBench-derived data | `summary_by_model.csv`, `paired_summary.csv` |
+| Other backbones | `extra_backbones_summary_by_model.csv`, `extra_backbones_paired_summary.csv` |
+| Spectral response | `scalar_summary/evolution_time_sensitivity_scalar_summary.csv` |
 
-Aggregate completed seed directories with:
-
-```bash
-python scripts/summarize_lag_sensitivity.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_lag_sensitivity/burgers_original_5seed_summary
-python scripts/summarize_lag_sensitivity.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ad_5seed_summary
-python scripts/summarize_lag_sensitivity.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_lag_sensitivity/ns_5seed_summary
-python scripts/plot_lag_sensitivity_mechanism_paper.py
-```
-
-## Figures and profiling
-
-```bash
-python scripts/plot_burgers_rollout.py --direct-model runs_burgers_fno_seed2_original_burgers_core/model --film-model runs_burgers_fno_film_seed2_original_burgers_core/model --data data/BurgersOSG_test.mat --sample -1 --steps 6,20 --out paper_figures/burgers_rollout.pdf
-python profiling/profile_ns_overhead.py --save-dir overhead_outputs_ns
-python profiling/profile_gl_overhead.py --save-dir overhead_outputs_gl
-```
-
-The profiling scripts report parameter counts, training-step time,
-inference-step time, and peak CUDA memory on the selected hardware.
+All reported standard deviations are population standard deviations across the
+specified seeds.

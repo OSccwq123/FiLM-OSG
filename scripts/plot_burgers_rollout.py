@@ -45,22 +45,22 @@ def main():
     args = parse_args()
     data = loadmat(args.data)
     trajectories = data["trajectories"].astype(np.float32)
-    lags = data["dt"].astype(np.float32)
+    time_intervals = data["dt"].astype(np.float32)
     coordinates = data["coordinates"].reshape(-1)
 
     sample = args.sample % trajectories.shape[0]
     steps = [int(value) for value in args.steps.split(",") if value]
-    if len(steps) != 2 or min(steps) < 1 or max(steps) > lags.shape[1]:
+    if len(steps) != 2 or min(steps) < 1 or max(steps) > time_intervals.shape[1]:
         raise ValueError("--steps must contain two valid rollout steps.")
 
     x0 = trajectories[sample : sample + 1, ..., 0]
-    dt = lags[sample : sample + 1, : max(steps)]
+    dt = time_intervals[sample : sample + 1, : max(steps)]
     truth = trajectories[sample]
     direct = load_prediction(args.direct_model, x0, dt, args.device)[0]
     film = load_prediction(args.film_model, x0, dt, args.device)[0]
     times = np.concatenate(([0.0], np.cumsum(dt[0])))
 
-    predictions = (("Direct-lag OSG-FNO", direct), ("FiLM-OSG-FNO", film))
+    predictions = (("Input-concatenation OSG-FNO", direct), ("FiLM-OSG-FNO", film))
     fig, axes = plt.subplots(2, 2, figsize=(8.2, 5.6), sharex=True, sharey=True)
     for row, step in enumerate(steps):
         for col, (title, prediction) in enumerate(predictions):

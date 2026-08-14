@@ -11,8 +11,8 @@ import numpy as np
 
 SEEDS = range(5)
 STAGES = ("block0_preactivation", "decoder")
-MODELS = ("Direct-lag OSG-FNO", "FiLM-OSG-FNO")
-COLORS = {"Direct-lag OSG-FNO": "#356E9F", "FiLM-OSG-FNO": "#C9495B"}
+MODELS = ("Input-concatenation OSG-FNO", "FiLM-OSG-FNO")
+COLORS = {"Input-concatenation OSG-FNO": "#356E9F", "FiLM-OSG-FNO": "#C9495B"}
 BENCHMARKS = (
     ("Original Burgers", "burgers_original_seed", "_layerwise", 10),
     ("Advection--diffusion", "ad_seed", "_layerwise", 12),
@@ -29,7 +29,9 @@ def load_spectra(root: Path, prefix: str, suffix: str):
     values = {stage: {model: [] for model in MODELS} for stage in STAGES}
     wavenumbers = {}
     for seed in SEEDS:
-        rows = read_rows(root / f"{prefix}{seed}{suffix}" / "lag_sensitivity_spectrum.csv")
+        rows = read_rows(
+            root / f"{prefix}{seed}{suffix}" / "evolution_time_sensitivity_spectrum.csv"
+        )
         for stage in STAGES:
             selected = [row for row in rows if row["stage"] == stage]
             selected.sort(key=lambda row: int(row["wavenumber"]))
@@ -43,8 +45,10 @@ def load_spectra(root: Path, prefix: str, suffix: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Plot the five-seed lag-sensitivity spectra.")
-    parser.add_argument("--input-dir", type=Path, default=Path("eval_outputs_lag_sensitivity"))
+    parser = argparse.ArgumentParser(description="Plot the five-seed evolution-time sensitivity spectra.")
+    parser.add_argument(
+        "--input-dir", type=Path, default=Path("eval_outputs_evolution_time_sensitivity")
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("paper_figures"))
     args = parser.parse_args()
 
@@ -131,8 +135,12 @@ def main():
     fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 0.992))
     fig.subplots_adjust(left=0.135, right=0.992, bottom=0.062, top=0.905, hspace=0.43, wspace=0.15)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.output_dir / "lag_sensitivity_mechanism_5seed.pdf", bbox_inches="tight")
-    fig.savefig(args.output_dir / "lag_sensitivity_mechanism_5seed.png", dpi=300, bbox_inches="tight")
+    fig.savefig(args.output_dir / "evolution_time_sensitivity_5seed.pdf", bbox_inches="tight")
+    fig.savefig(
+        args.output_dir / "evolution_time_sensitivity_5seed.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
 

@@ -118,33 +118,3 @@ def spectrum_error_metrics(pred, truth, eps=1e-12):
         "Spectrum Error": float(np.mean(vals)),
         "Final Spectrum Error": float(np.mean(final_vals)),
     }
-
-
-def tv_overshoot_shock_metrics_1d(pred, truth, eps=1e-12):
-    pred_roll, true_roll = _roll(pred, truth)
-    tv_err = []
-    shock_err = []
-    overshoot = []
-    for n in range(pred_roll.shape[0]):
-        for t in range(pred_roll.shape[-1]):
-            p = pred_roll[n, ..., t]
-            y = true_roll[n, ..., t]
-            tvp = np.abs(np.roll(p, -1, axis=0) - p).sum(axis=0).mean()
-            tvy = np.abs(np.roll(y, -1, axis=0) - y).sum(axis=0).mean()
-            tv_err.append(abs(tvp - tvy))
-            pg = np.abs(np.roll(p, -1, axis=0) - np.roll(p, 1, axis=0)).reshape(p.shape[0], -1).mean(axis=1)
-            yg = np.abs(np.roll(y, -1, axis=0) - np.roll(y, 1, axis=0)).reshape(y.shape[0], -1).mean(axis=1)
-            raw = abs(int(np.argmax(pg)) - int(np.argmax(yg)))
-            shock_err.append(min(raw, p.shape[0] - raw) / p.shape[0])
-            overshoot.append(max(0.0, float(p.max() - y.max())) + max(0.0, float(y.min() - p.min())))
-    return {"TV Error": float(np.mean(tv_err)), "Shock Loc Error": float(np.mean(shock_err)), "Overshoot": float(np.mean(overshoot))}
-
-
-def combined_metrics(pred, truth, include_1d_local=False):
-    out = {}
-    out.update(mean_drift_metrics(pred, truth))
-    out.update(band_error_metrics(pred, truth))
-    out.update(spectrum_error_metrics(pred, truth))
-    if include_1d_local:
-        out.update(tv_overshoot_shock_metrics_1d(pred, truth))
-    return out

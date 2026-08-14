@@ -53,7 +53,7 @@ def make_alternating_partition(terminal_time, first):
 
 
 def make_random_pair_partition(terminal_time, rng):
-    """Return fixed random pairs [a, 2-a] with every lag in [0.5, 1.5]."""
+    """Return fixed random pairs [a, 2-a] with both entries in [0.5, 1.5]."""
     terminal_time = int(terminal_time)
     steps = []
     for _ in range(terminal_time // 2):
@@ -69,7 +69,7 @@ def validate_partition(name, steps, terminal_time):
     if abs(total - float(terminal_time)) > 1e-5:
         raise RuntimeError(f"{name}: sum={total}, expected {terminal_time}")
     if float(np.min(steps)) < 0.5 - 1e-6 or float(np.max(steps)) > 1.5 + 1e-6:
-        raise RuntimeError(f"{name}: lags fall outside [0.5, 1.5]")
+        raise RuntimeError(f"{name}: time intervals fall outside [0.5, 1.5]")
 
 
 def make_partitions(terminal_time, num_random=8, partition_seed=DEFAULT_PARTITION_SEED):

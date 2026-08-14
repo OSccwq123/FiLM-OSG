@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Summarize lag-sensitivity spectral energy and effective rank.
+"""Summarize evolution-time sensitivity energy and effective rank.
 
 The CSV field names retain ``nonzero_fraction`` to match the evaluation output.
 The reported quantity is an energy fraction: the
-sum of lag-sensitivity spectral energy outside the zero mode, normalized by the
+sum of sensitivity energy outside the zero mode, normalized by the
 corresponding full or selected-band energy.
 """
 
@@ -37,7 +37,7 @@ BENCHMARKS = {
     },
 }
 
-MODELS = ["Direct-lag OSG-FNO", "FiLM-OSG-FNO"]
+MODELS = ["Input-concatenation OSG-FNO", "FiLM-OSG-FNO"]
 STAGES = ["block0_preactivation", "decoder"]
 STAGE_LABELS = {
     "block0_preactivation": "First-block output before terminal activation",
@@ -87,10 +87,10 @@ def fmt(value: float) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarize scalar lag-sensitivity mechanism metrics.")
-    parser.add_argument("--root", default="eval_outputs_lag_sensitivity")
+    parser = argparse.ArgumentParser(description="Summarize scalar evolution-time sensitivity metrics.")
+    parser.add_argument("--root", default="eval_outputs_evolution_time_sensitivity")
     parser.add_argument("--seeds", default="0,1,2,3,4")
-    parser.add_argument("--out-dir", default="eval_outputs_lag_sensitivity/scalar_summary")
+    parser.add_argument("--out-dir", default="eval_outputs_evolution_time_sensitivity/scalar_summary")
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -114,7 +114,7 @@ def main() -> None:
                 }
                 for seed in seeds:
                     run_dir = root / f"{cfg['run_prefix']}{seed}{cfg['run_suffix']}"
-                    spectrum_path = run_dir / "lag_sensitivity_spectrum.csv"
+                    spectrum_path = run_dir / "evolution_time_sensitivity_spectrum.csv"
                     wavenumbers, values = read_spectrum(spectrum_path, stage, model)
                     total = sum(values)
                     zero = sum(value for k, value in zip(wavenumbers, values) if k == 0)
@@ -151,15 +151,15 @@ def main() -> None:
                         out_row[f"{metric}_{name}"] = value
                 rows.append(out_row)
 
-    csv_path = out_dir / "lag_sensitivity_scalar_summary.csv"
+    csv_path = out_dir / "evolution_time_sensitivity_scalar_summary.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
 
-    md_path = out_dir / "lag_sensitivity_scalar_summary.md"
+    md_path = out_dir / "evolution_time_sensitivity_scalar_summary.md"
     with md_path.open("w", encoding="utf-8") as handle:
-        handle.write("# Lag-Sensitivity Scalar Mechanism Summary\n\n")
+        handle.write("# Evolution-Time Sensitivity Summary\n\n")
         handle.write(
             f"Values are population mean +/- standard deviation over seeds {{{seed_text}}}. "
             "For AD and NS, |k|<12 is used only as a conservative low radial band.\n\n"
@@ -178,7 +178,7 @@ def main() -> None:
                 f"| {fmt(row['outside_low_band_fraction_mean'])} +/- {fmt(row['outside_low_band_fraction_std'])} |\n"
             )
 
-    tex_path = out_dir / "lag_sensitivity_scalar_table_snippet.tex"
+    tex_path = out_dir / "evolution_time_sensitivity_scalar_table_snippet.tex"
     with tex_path.open("w", encoding="utf-8") as handle:
         handle.write(
             f"% Compact scalar mechanism table snippet. Values are mean $\\pm$ population std over seeds {{{seed_text}}}.\n"

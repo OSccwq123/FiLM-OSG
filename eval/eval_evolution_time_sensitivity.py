@@ -100,12 +100,12 @@ def radial_spectrum_2d(sensitivity: torch.Tensor) -> np.ndarray:
 
 def sample_pairs(data: dict, model, count: int, seed: int, fd_eps: float):
     trajectories = np.asarray(data["trajectories"], dtype=np.float32)
-    lags = np.asarray(data["dt"], dtype=np.float32)
-    ntraj, steps = lags.shape
+    time_intervals = np.asarray(data["dt"], dtype=np.float32)
+    ntraj, steps = time_intervals.shape
     all_n, all_t = np.meshgrid(np.arange(ntraj), np.arange(steps), indexing="ij")
     all_n = all_n.reshape(-1)
     all_t = all_t.reshape(-1)
-    all_dt = lags.reshape(-1)
+    all_dt = time_intervals.reshape(-1)
     all_delta = encode_dt(model, all_dt)
     valid = np.flatnonzero(np.abs(all_delta) <= 1.0 - 2.0 * fd_eps)
     if count > len(valid):
@@ -226,7 +226,7 @@ def spectrum_metrics(energy: np.ndarray, modes: int):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Layerwise lag-sensitivity spectrum diagnostic")
+    parser = argparse.ArgumentParser(description="Layerwise sensitivity to evolution time")
     parser.add_argument("--benchmark", default="original_burgers")
     parser.add_argument("--model-seed", type=int, default=0)
     parser.add_argument("--direct-model", type=Path, required=True)
@@ -237,7 +237,7 @@ def main():
     parser.add_argument("--chunk-size", type=int, default=32)
     parser.add_argument("--fd-eps", type=float, default=1e-3)
     parser.add_argument("--device", default="cuda:0")
-    parser.add_argument("--out-dir", default="eval_outputs_lag_sensitivity/burgers_original_seed0")
+    parser.add_argument("--out-dir", default="eval_outputs_evolution_time_sensitivity/burgers_original_seed0")
     args = parser.parse_args()
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
@@ -251,7 +251,7 @@ def main():
     states_np, delta_np, dt_np = sample_pairs(data, direct, args.samples, args.sample_seed, args.fd_eps)
     film_delta = encode_dt(film, dt_np)
     if not np.allclose(delta_np, film_delta, rtol=1e-6, atol=1e-6):
-        raise ValueError("Direct and FiLM checkpoints use different lag encodings")
+        raise ValueError("Input-concatenation and FiLM checkpoints use different time transformations")
 
     direct_states = normalize_state(direct, states_np).to(device)
     film_states = normalize_state(film, states_np).to(device)
@@ -260,7 +260,7 @@ def main():
     outputs = {}
     stages = ("block0_preactivation", "decoder")
     model_specs = (
-        ("Direct-lag OSG-FNO", direct, direct_states),
+        ("Input-concatenation OSG-FNO", direct, direct_states),
         ("FiLM-OSG-FNO", film, film_states),
     )
     for stage in stages:
@@ -283,7 +283,7 @@ def main():
         "data_path": str(Path(args.data)),
         "sample_count": args.samples,
         "sample_seed": args.sample_seed,
-        "fd_eps_normalized_lag": args.fd_eps,
+        "fd_eps_normalized_delta": args.fd_eps,
         "physical_dt_min": float(np.min(dt_np)),
         "physical_dt_max": float(np.max(dt_np)),
         "normalized_delta_min": float(np.min(delta_np)),
@@ -291,10 +291,14 @@ def main():
         "device": str(device),
         "stages": outputs,
     }
-    (out_dir / "lag_sensitivity_summary.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    (out_dir / "evolution_time_sensitivity_summary.json").write_text(
+        json.dumps(metadata, indent=2), encoding="utf-8"
+    )
 
     labels = list(outputs[stages[0]])
-    with (out_dir / "lag_sensitivity_spectrum.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (out_dir / "evolution_time_sensitivity_spectrum.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.writer(handle)
         writer.writerow(["stage", "wavenumber", *labels])
         nfreq = len(outputs[stages[0]][labels[0]]["normalized_energy"])
@@ -302,7 +306,9 @@ def main():
             for k in range(nfreq):
                 writer.writerow([stage, k, *[outputs[stage][label]["normalized_energy"][k] for label in labels]])
 
-    with (out_dir / "lag_sensitivity_metrics.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (out_dir / "evolution_time_sensitivity_metrics.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         fields = [
             "stage", "model", "sensitivity_rms", "fd_relative_error",
             "zero_mode_fraction_full", "nonzero_fraction_retained",
@@ -330,17 +336,19 @@ def main():
         ax.set_xlabel("Wavenumber $k$")
         ax.set_title(titles[stage])
         ax.grid(True, which="both", alpha=0.25)
-    axes[0].set_ylabel("Normalized lag-sensitivity energy")
+    axes[0].set_ylabel("Normalized evolution-time sensitivity energy")
     handles, legend_labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, legend_labels, loc="upper center", bbox_to_anchor=(0.5, 1.04), ncol=3, frameon=False)
     benchmark_title = args.benchmark.replace("_", " ").title()
     fig.suptitle(
-        f"{benchmark_title}: layerwise lag-sensitivity spectra (seed {args.model_seed})",
+        f"{benchmark_title}: layerwise evolution-time sensitivity (seed {args.model_seed})",
         y=1.13,
     )
     fig.tight_layout()
-    fig.savefig(out_dir / "lag_sensitivity_layerwise.pdf", bbox_inches="tight")
-    fig.savefig(out_dir / "lag_sensitivity_layerwise.png", dpi=220, bbox_inches="tight")
+    fig.savefig(out_dir / "evolution_time_sensitivity_layerwise.pdf", bbox_inches="tight")
+    fig.savefig(
+        out_dir / "evolution_time_sensitivity_layerwise.png", dpi=220, bbox_inches="tight"
+    )
     plt.close(fig)
 
     print(json.dumps(metadata, indent=2), flush=True)

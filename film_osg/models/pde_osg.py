@@ -25,7 +25,7 @@ class PDE_osg(PDE):
         self._prepare_auxiliary_samples()
         
     def _prepare_auxiliary_samples(self):
-        """Generate the fixed auxiliary states and lag pairs used in training."""
+        """Generate the fixed auxiliary states and time-interval pairs used in training."""
         if self.sg_pairing == 0:
             return
 

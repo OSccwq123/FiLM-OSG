@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate variable-lag Burgers data with steep gradients."""
+"""Generate Burgers data with steep gradients over varying evolution times."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def rk4_step(u: np.ndarray, dt: float, dx: float) -> np.ndarray:
 
 
 def evolve(u: np.ndarray, delta: float, dx: float, cfl: float) -> np.ndarray:
-    """Evolve inviscid Burgers over a physical lag delta."""
+    """Evolve inviscid Burgers over the time interval ``delta``."""
     t = 0.0
 
     while t < delta - 1e-14:
@@ -101,8 +101,8 @@ def make_split(
     nsnaps: int,
     fine_n: int,
     coarse_n: int,
-    lag_min: float,
-    lag_max: float,
+    delta_min: float,
+    delta_max: float,
     seed: int,
     cfl: float,
 ) -> dict[str, np.ndarray]:
@@ -121,10 +121,10 @@ def make_split(
         trajectories[i, :, 0, 0] = conservative_average(u, coarse_n).astype(np.float32)
 
         for k in range(nsnaps - 1):
-            lag = rng.uniform(lag_min, lag_max)
-            dt[i, k] = lag
+            delta = rng.uniform(delta_min, delta_max)
+            dt[i, k] = delta
 
-            u = evolve(u, lag, dx, cfl)
+            u = evolve(u, delta, dx, cfl)
 
             trajectories[i, :, 0, k + 1] = conservative_average(u, coarse_n).astype(
                 np.float32
@@ -144,7 +144,7 @@ def make_split(
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
-        description="Generate variable-lag sharp-front inviscid Burgers OSG data."
+        description="Generate sharp-front inviscid Burgers OSG data over varying evolution times."
     )
 
     ap.add_argument("--out-dir", default="data")
@@ -158,8 +158,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--fine-n", type=int, default=4096)
     ap.add_argument("--coarse-n", type=int, default=64)
 
-    ap.add_argument("--lag-min", type=float, default=0.005)
-    ap.add_argument("--lag-max", type=float, default=0.15)
+    ap.add_argument("--delta-min", type=float, default=0.005)
+    ap.add_argument("--delta-max", type=float, default=0.15)
 
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--cfl", type=float, default=0.5)
@@ -182,8 +182,8 @@ def validate_args(args: argparse.Namespace) -> None:
             f"fine-n={args.fine_n} must be divisible by coarse-n={args.coarse_n}."
         )
 
-    if not (0.0 < args.lag_min < args.lag_max):
-        raise ValueError("Require 0 < lag-min < lag-max.")
+    if not (0.0 < args.delta_min < args.delta_max):
+        raise ValueError("Require 0 < delta-min < delta-max.")
 
     if args.cfl <= 0:
         raise ValueError("cfl must be positive.")
@@ -205,8 +205,8 @@ def main() -> None:
         nsnaps=args.train_snaps,
         fine_n=args.fine_n,
         coarse_n=args.coarse_n,
-        lag_min=args.lag_min,
-        lag_max=args.lag_max,
+        delta_min=args.delta_min,
+        delta_max=args.delta_max,
         seed=args.seed,
         cfl=args.cfl,
     )
@@ -216,8 +216,8 @@ def main() -> None:
         nsnaps=args.test_snaps,
         fine_n=args.fine_n,
         coarse_n=args.coarse_n,
-        lag_min=args.lag_min,
-        lag_max=args.lag_max,
+        delta_min=args.delta_min,
+        delta_max=args.delta_max,
         seed=args.seed + 100000,
         cfl=args.cfl,
     )

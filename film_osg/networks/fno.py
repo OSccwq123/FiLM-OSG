@@ -515,7 +515,7 @@ class osg_fno1d(nn):
         return x0 + x * dt
         
     def predict(self, x, dt, device):
-        """Roll out unnormalized states over the supplied time lags."""
+        """Roll out unnormalized states over the supplied time intervals."""
         self.to(device)
         assert x.shape[-1] == self.output_dim
         steps = dt.shape[1]
@@ -553,20 +553,6 @@ class osg_fno1d(nn):
         return y.numpy()
     
 
-
-class vt_fno1d(osg_fno1d):
-    """Variable-time FNO baseline without OSG outer-increment structure."""
-
-    def forward(self, x):
-        x = self.en(x)
-        x = x.permute(0, 2, 1)
-        for i in range(self.nblocks):
-            x1 = self.conv[i](x)
-            x1 = self.mlp[i](x1)
-            x2 = self.w[i](x)
-            x = self.activation(x1 + x2)
-        x = self.de(x)
-        return x.permute(0, 2, 1)
 
 class osg_fno1d_with_film(nn):
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
@@ -658,7 +644,7 @@ class osg_fno1d_with_film(nn):
         return x0 + x * dt
     
     def predict(self, x, dt, device):
-        """Roll out unnormalized states over the supplied time lags."""
+        """Roll out unnormalized states over the supplied time intervals."""
         self.to(device)
         assert x.shape[-1] == self.output_dim
         steps = dt.shape[1]
@@ -696,42 +682,8 @@ class osg_fno1d_with_film(nn):
         return y.numpy()
 
 
-class vt_fno1d_with_film(osg_fno1d_with_film):
-    """Variable-time FiLM-FNO with direct next-state prediction."""
-
-    def forward(self, x):
-        x0 = x[..., :-1]
-        dt_norm = x[..., -1:]
-        batch_size = x.shape[0]
-
-        dt_scalar = dt_norm.mean(dim=[1])
-        film_params = self.time_encoder(dt_scalar)
-        film_params = film_params.view(batch_size, self.nblocks, 2, self.hid_dim)
-        gammas = film_params[:, :, 0, :]
-        betas = film_params[:, :, 1, :]
-
-        x = self.en(x0)
-        x = x.permute(0, 2, 1)
-
-        for i in range(self.nblocks):
-            x1 = self.conv[i](x)
-            x1 = self.mlp[i](x1)
-            x2 = self.w[i](x)
-            x = x1 + x2
-
-            gamma = gammas[:, i, :].view(batch_size, self.hid_dim, 1)
-            beta = betas[:, i, :].view(batch_size, self.hid_dim, 1)
-
-            x = gamma * x + beta
-            x = self.activation(x)
-
-        x = self.de(x)
-        x = x.permute(0, 2, 1)
-        return x
-
-
 class gl_osg_fno1d(nn):
-    """Global--local direct-lag OSG-FNO for one-dimensional data."""
+    """Global--local input-concatenation OSG-FNO for one-dimensional data."""
 
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super(gl_osg_fno1d, self).__init__()
@@ -782,7 +734,7 @@ class gl_osg_fno1d(nn):
 
 
 class gl_osg_fno1d_with_film(gl_osg_fno1d):
-    """Global-local FiLM-OSG-FNO with branchwise lag modulation."""
+    """Global--local FiLM-OSG-FNO with branchwise conditioning on Delta."""
 
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=True):
         super().__init__(vmin, vmax, tmin, tmax, config, multiscale)

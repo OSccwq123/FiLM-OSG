@@ -17,14 +17,17 @@ def read_csv(path: Path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="eval_outputs_lag_sensitivity")
+    parser.add_argument("--root", default="eval_outputs_evolution_time_sensitivity")
     parser.add_argument("--seeds", default="0,1,2,3,4")
     parser.add_argument("--run-prefix", default="burgers_original_seed")
     parser.add_argument("--run-suffix", default="_layerwise")
     parser.add_argument("--title", default="Original Burgers")
     parser.add_argument("--retained-modes", type=int, default=10)
     parser.add_argument("--radial-band", action="store_true")
-    parser.add_argument("--out-dir", default="eval_outputs_lag_sensitivity/burgers_original_5seed_summary")
+    parser.add_argument(
+        "--out-dir",
+        default="eval_outputs_evolution_time_sensitivity/burgers_original_5seed_summary",
+    )
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -36,10 +39,10 @@ def main():
     spectrum_rows = []
     for seed in seeds:
         run_dir = root / f"{args.run_prefix}{seed}{args.run_suffix}"
-        for row in read_csv(run_dir / "lag_sensitivity_metrics.csv"):
+        for row in read_csv(run_dir / "evolution_time_sensitivity_metrics.csv"):
             row["seed"] = seed
             metric_rows.append(row)
-        for row in read_csv(run_dir / "lag_sensitivity_spectrum.csv"):
+        for row in read_csv(run_dir / "evolution_time_sensitivity_spectrum.csv"):
             row["seed"] = seed
             spectrum_rows.append(row)
 
@@ -53,7 +56,7 @@ def main():
         "centroid_retained",
     ]
     stages = ["block0_preactivation", "decoder"]
-    models = ["Direct-lag OSG-FNO", "FiLM-OSG-FNO"]
+    models = ["Input-concatenation OSG-FNO", "FiLM-OSG-FNO"]
     summary = []
     for stage in stages:
         for model in models:
@@ -67,14 +70,18 @@ def main():
                 item[f"{metric}_max"] = float(values.max())
             summary.append(item)
 
-    with (out_dir / "lag_sensitivity_5seed_metrics.csv").open("w", newline="", encoding="utf-8") as handle:
+    with (out_dir / "evolution_time_sensitivity_5seed_metrics.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.DictWriter(handle, fieldnames=[key for key in summary[0] if key != "seeds"])
         writer.writeheader()
         for row in summary:
             writer.writerow({key: value for key, value in row.items() if key != "seeds"})
-    (out_dir / "lag_sensitivity_5seed_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (out_dir / "evolution_time_sensitivity_5seed_summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
-    colors = {"Direct-lag OSG-FNO": "#4C78A8", "FiLM-OSG-FNO": "#D1495B"}
+    colors = {"Input-concatenation OSG-FNO": "#4C78A8", "FiLM-OSG-FNO": "#D1495B"}
     titles = {"block0_preactivation": "First block, before block activation", "decoder": "Final decoder increment"}
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 3.9), sharey=True)
     for ax, stage in zip(axes, stages):
@@ -110,13 +117,17 @@ def main():
         ax.set_xlabel("Wavenumber $k$")
         ax.set_title(titles[stage])
         ax.grid(True, which="both", alpha=0.25)
-    axes[0].set_ylabel("Normalized lag-sensitivity energy")
+    axes[0].set_ylabel("Normalized evolution-time sensitivity energy")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.04), ncol=3, frameon=False)
-    fig.suptitle(f"{args.title}: layerwise lag-sensitivity spectra (five seeds)", y=1.13)
+    fig.suptitle(f"{args.title}: layerwise evolution-time sensitivity (five seeds)", y=1.13)
     fig.tight_layout()
-    fig.savefig(out_dir / "lag_sensitivity_layerwise_5seed.pdf", bbox_inches="tight")
-    fig.savefig(out_dir / "lag_sensitivity_layerwise_5seed.png", dpi=220, bbox_inches="tight")
+    fig.savefig(out_dir / "evolution_time_sensitivity_layerwise_5seed.pdf", bbox_inches="tight")
+    fig.savefig(
+        out_dir / "evolution_time_sensitivity_layerwise_5seed.png",
+        dpi=220,
+        bbox_inches="tight",
+    )
     plt.close(fig)
 
     for row in summary:

@@ -43,8 +43,8 @@ def training_command(args, model, seed):
         command.extend(["--tag", args.tag])
     if args.overwrite:
         command.append("--overwrite")
-    if args.log_lag:
-        command.append("--log-lag")
+    if args.log_delta:
+        command.append("--log-delta")
     if args.conserve_mean:
         command.append("--conserve-mean")
     if args.problem_dim is not None:
@@ -76,7 +76,7 @@ def parse_args():
     parser.add_argument("--depth", type=int, default=4)
     parser.add_argument("--width", type=int, default=20)
     parser.add_argument("--problem-dim", type=int, default=None)
-    parser.add_argument("--log-lag", action="store_true")
+    parser.add_argument("--log-delta", action="store_true")
     parser.add_argument("--conserve-mean", action="store_true")
     parser.add_argument("--hf-weight", type=float, default=0.0)
     parser.add_argument("--hf-sg-weight", type=float, default=0.0)

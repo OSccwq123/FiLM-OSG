@@ -7,7 +7,7 @@ distributed under the LGPL-2.1 license.
 
 U-NO-style and Transolver-style denote OSG-adapted variants inspired by the
 corresponding papers and public projects. Inputs have shape
-`(B, H, W, C + 1)`, with the normalized lag in the last channel.
+`(B, H, W, C + 1)`, with normalized Delta in the last channel.
 Functional activations are wrapped with `ActivationModule` when used in
 `torch.nn.Sequential`.
 """
@@ -95,7 +95,7 @@ def apply_film_tokens(x, gamma, beta):
 
 
 def decode_dt(dt_norm, tmin, tmax, multiscale):
-    """Decode normalized lag code to physical lag."""
+    """Map normalized Delta back to physical time."""
     dt = dt_norm * 0.5 * (tmax - tmin) + 0.5 * (tmax + tmin)
     if multiscale:
         dt = 10.0 ** dt
@@ -246,7 +246,7 @@ class UnoOperatorBlock2d(torch.nn.Module):
 
 
 class osg_uno2d(BaseOSG2D):
-    """Direct-lag OSG-U-NO-style backbone."""
+    """Input-concatenation OSG-U-NO-style backbone."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
         super().__init__()
         self.register_buffer("vmin", torch.from_numpy(vmin).float())
@@ -484,7 +484,7 @@ class TransolverBlock(torch.nn.Module):
 
 
 class osg_transolver2d(BaseOSG2D):
-    """Direct-lag OSG-Transolver-style backbone."""
+    """Input-concatenation OSG-Transolver-style backbone."""
     def __init__(self, vmin, vmax, tmin, tmax, config, multiscale=False):
         super().__init__()
         self.register_buffer("vmin", torch.from_numpy(vmin).float())

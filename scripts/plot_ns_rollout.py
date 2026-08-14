@@ -48,7 +48,7 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     arrays = (truth, direct, film)
-    titles = ("Reference", "Direct-lag OSG-FNO", "FiLM-OSG-FNO")
+    titles = ("Reference", "Input-concatenation OSG-FNO", "FiLM-OSG-FNO")
     fig, axes = plt.subplots(len(steps), 3, figsize=(9.2, 2.8 * len(steps)), squeeze=False)
     for row, step in enumerate(steps):
         reference = truth[args.case, :, :, 0, step]
@@ -79,7 +79,7 @@ def main():
     times = np.arange(truth.shape[-1])
 
     fig, ax = plt.subplots(figsize=(5.2, 3.5))
-    ax.plot(times, rel_l2_curve(direct_case, truth_case), label="Direct-lag OSG-FNO")
+    ax.plot(times, rel_l2_curve(direct_case, truth_case), label="Input-concatenation OSG-FNO")
     ax.plot(times, rel_l2_curve(film_case, truth_case), label="FiLM-OSG-FNO")
     ax.set_xlabel("rollout step")
     ax.set_ylabel(r"relative $L^2$ error")

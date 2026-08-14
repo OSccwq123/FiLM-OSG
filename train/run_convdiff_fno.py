@@ -53,7 +53,7 @@ def make_config(
     hf_sg_weight: float = 0.0,
     hf_warmup_frac: float = 0.1,
     conserve_mean: bool = False,
-    log_lag: bool = False,
+    log_delta: bool = False,
     learning_rate: float = 1e-3,
     sg_weight: float = 1.0,
     modes1: int = 12,
@@ -65,7 +65,7 @@ def make_config(
     return {
         "problem_type": "2d_regular",
         "problem_dim": int(problem_dim),
-        "multiscale": log_lag,
+        "multiscale": log_delta,
         "dtype": "float32",
 
         "seed": seed,
@@ -161,7 +161,7 @@ def train_one(
     save_dir: str = ".",
     device: str | None = None,
     data_dir: str | os.PathLike[str] = DEFAULT_DATA_DIR,
-    log_lag: bool = False,
+    log_delta: bool = False,
     hf_weight: float = 0.0,
     hf_sg_weight: float = 0.0,
     hf_warmup_frac: float = 0.1,
@@ -188,7 +188,7 @@ def train_one(
         hf_sg_weight=hf_sg_weight,
         hf_warmup_frac=hf_warmup_frac,
         conserve_mean=conserve_mean,
-        log_lag=log_lag,
+        log_delta=log_delta,
         learning_rate=learning_rate,
         sg_weight=sg_weight,
         modes1=modes1,
@@ -266,9 +266,9 @@ def main():
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--data-dir", type=str, default=str(DEFAULT_DATA_DIR))
     parser.add_argument(
-        "--log-lag",
+        "--log-delta",
         action="store_true",
-        help="Use log10(dt) before affine lag normalization for this AD run.",
+        help="Use log10(dt) before affine normalization of Delta for this AD run.",
     )
     parser.add_argument(
         "--overwrite",
@@ -303,7 +303,7 @@ def main():
         save_dir=args.save_dir,
         device=args.device,
         data_dir=args.data_dir,
-        log_lag=args.log_lag,
+        log_delta=args.log_delta,
         hf_weight=args.hf_weight,
         hf_sg_weight=args.hf_sg_weight,
         hf_warmup_frac=args.hf_warmup_frac,

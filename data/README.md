@@ -15,15 +15,15 @@ The repository includes the following generation scripts:
   `BurgersOSG_test.mat`.
 - `scripts/data_generation/convection_diffusion.m`: generates `train_data.mat`
   and `test_data.mat` for the 2D advection--diffusion benchmark.
-- `scripts/data_generation/convection_diffusion_fixed_lag_extrapolation.m`:
-  generates optional fixed-lag advection--diffusion test files outside the main
-  training lag interval.
+- `scripts/data_generation/convection_diffusion_fixed_time.m`: generates
+  optional advection--diffusion test files at fixed evolution times outside the
+  main training interval.
 - `scripts/data_generation/generate_burgers_sharp_osg.py`: generates the
   sharp-front inviscid Burgers extension with conservative averaging.
 - `scripts/data_generation/convert_pdebench_to_osg.py`: forms the
-  trajectory-disjoint variable-lag PDEBench datasets used in the paper.
+  trajectory-disjoint PDEBench datasets with varying evolution times.
 - `scripts/data_generation/check_osg_mat_data.py`: checks the converted array
-  shapes, coordinates, state values, and time lags.
+  shapes, coordinates, state values, and time intervals.
 
 The MATLAB generators write beside the scripts by default. Set the environment
 variable `FILM_OSG_OUTPUT_DIR` to write elsewhere. The Python sharp-front
@@ -33,7 +33,7 @@ generator accepts `--out-dir` explicitly, for example:
 python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
 ```
 
-The fixed-lag extrapolation script writes:
+The fixed-time extrapolation script writes:
 
 ```text
 test_data_fixed_dt_0p0025.mat

@@ -28,7 +28,7 @@ from eval.eval_convdiff_fno import (  # noqa: E402
 
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 DEFAULT_TEST_GLOB = "test_data_fixed_dt_*.mat"
-DEFAULT_SAVE_DIR = "./eval_outputs_convdiff_lag_extrapolation"
+DEFAULT_SAVE_DIR = "./eval_outputs_convdiff_fixed_time"
 
 
 def resolve_test_files(data_dir, test_files):
@@ -42,10 +42,10 @@ def resolve_test_files(data_dir, test_files):
     return paths
 
 
-def lag_value(dt):
+def time_interval_value(dt):
     unique = np.unique(np.asarray(dt, dtype=np.float64))
     if unique.size != 1:
-        raise ValueError("Each fixed-lag test file must contain a single time lag.")
+        raise ValueError("Each fixed-time test file must contain a single value of dt.")
     return float(unique[0])
 
 
@@ -59,7 +59,7 @@ def evaluate_model(
     eval_steps=None,
     save_mat=False,
     save_dir=DEFAULT_SAVE_DIR,
-    test_stem="fixed_lag",
+    test_stem="fixed_time",
 ):
     path = model_path_for(model_name, seed, tag, root=model_root)
     if not path.is_file():
@@ -109,7 +109,9 @@ def evaluate_model(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate fixed-lag advection--diffusion rollouts.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate advection--diffusion rollouts at fixed evolution times."
+    )
     parser.add_argument("--models", default=",".join(DEFAULT_MODELS))
     parser.add_argument("--seeds", default=",".join(str(seed) for seed in DEFAULT_SEEDS))
     parser.add_argument("--tag", default="")
@@ -131,7 +133,7 @@ def main():
     test_files = resolve_test_files(args.data_dir, args.test_files)
     if not test_files:
         raise FileNotFoundError(
-            f"No fixed-lag test files matched {Path(args.data_dir) / DEFAULT_TEST_GLOB}"
+            f"No fixed-time test files matched {Path(args.data_dir) / DEFAULT_TEST_GLOB}"
         )
 
     save_dir = Path(args.save_dir)
@@ -145,7 +147,7 @@ def main():
         if not test_file.is_file():
             raise FileNotFoundError(f"Test data not found: {test_file}")
         test_data = loadmat(test_file)
-        lag = lag_value(test_data["dt"])
+        time_interval = time_interval_value(test_data["dt"])
         seedwise = []
 
         for model_name in models:
@@ -164,7 +166,7 @@ def main():
                 )
                 row = {
                     "test_file": test_file.name,
-                    "lag": lag,
+                    "time_interval": time_interval,
                     "model": model_name,
                     "seed": seed,
                     "tag": args.tag,
@@ -178,7 +180,7 @@ def main():
             summary = summarize_metric_dicts(rows, metric_keys)
             out = {
                 "test_file": test_file.name,
-                "lag": lag,
+                "time_interval": time_interval,
                 "model": model_name,
                 "num_seeds": len(rows),
                 "seeds": ",".join(str(row["seed"]) for row in rows),
@@ -189,11 +191,11 @@ def main():
             all_summary.append(out)
 
         for row in paired_comparison(seedwise, DEFAULT_PAIRS, metric_keys):
-            all_paired.append({"test_file": test_file.name, "lag": lag, **row})
+            all_paired.append({"test_file": test_file.name, "time_interval": time_interval, **row})
 
-    write_csv(save_dir / "convdiff_fixed_lag_seedwise.csv", all_seedwise)
-    write_csv(save_dir / "convdiff_fixed_lag_summary_by_model.csv", all_summary)
-    write_csv(save_dir / "convdiff_fixed_lag_paired_summary.csv", all_paired)
+    write_csv(save_dir / "convdiff_fixed_time_seedwise.csv", all_seedwise)
+    write_csv(save_dir / "convdiff_fixed_time_summary_by_model.csv", all_summary)
+    write_csv(save_dir / "convdiff_fixed_time_paired_summary.csv", all_paired)
     print(f"\nSaved summaries to {save_dir}")
 
 

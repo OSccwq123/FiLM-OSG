@@ -208,7 +208,7 @@ def encode_dt(dt, tmin, tmax, multiscale=False):
 
 
 def make_sg_batch(xb, tmin, tmax, multiscale=False):
-    """Construct a semigroup batch from observed and shuffled time lags."""
+    """Construct a semigroup batch from observed and shuffled time intervals."""
     x0 = xb[..., :-1]
     dt1_norm = xb[..., -1:]
 

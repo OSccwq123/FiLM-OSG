@@ -1,8 +1,8 @@
-% Generate fixed-lag advection--diffusion extrapolation test sets.
+% Generate advection--diffusion extrapolation sets at fixed evolution times.
 %
 % This diagnostic is separate from the main advection--diffusion benchmark.
-% The main benchmark uses train/test variable lags in [0.005, 0.5]. Here we
-% generate fixed-lag test sets outside that training interval to probe lag
+% The main benchmark uses train/test time intervals in [0.005, 0.5]. Here we
+% generate fixed-time test sets outside that interval to probe
 % extrapolation behavior without changing the main data files.
 %
 % Output files:
@@ -12,13 +12,13 @@
 %
 % Each output contains:
 %   coordinates:   64 x 64 x 2 grid coordinates
-%   dt:            100 x 20 fixed lag intervals
+%   dt:            100 x 20 fixed time intervals
 %   trajectories:  100 x 64 x 64 x 1 x 21 snapshots
 %
 clear; clc;
 
-fixed_lag_seed = 100042;
-rng(fixed_lag_seed);
+fixed_time_seed = 100042;
+rng(fixed_time_seed);
 
 script_path = mfilename('fullpath');
 script_dir = fileparts(script_path);
@@ -48,14 +48,14 @@ n_modes = 25;
 
 train_dt_min = 0.005;
 train_dt_max = 0.5;
-fixed_lags = [0.0025, 0.75, 1.0];
+fixed_dt_values = [0.0025, 0.75, 1.0];
 
-fprintf('Advection--diffusion fixed-lag extrapolation diagnostic:\n');
-fprintf('  training lag interval: [%.4g, %.4g]\n', train_dt_min, train_dt_max);
-fprintf('  fixed diagnostic lags: %s\n', mat2str(fixed_lags));
-fprintf('  trajectories: %d, rollout steps per lag: %d\n', ...
+fprintf('Advection--diffusion fixed-time extrapolation diagnostic:\n');
+fprintf('  training time interval: [%.4g, %.4g]\n', train_dt_min, train_dt_max);
+fprintf('  fixed values of dt: %s\n', mat2str(fixed_dt_values));
+fprintf('  trajectories: %d, rollout steps per dt: %d\n', ...
     n_test_trajectories, test_steps);
-fprintf('  random seed: %d\n', fixed_lag_seed);
+fprintf('  random seed: %d\n', fixed_time_seed);
 fprintf('  output directory: %s\n', output_dir);
 
 %% Periodic grid and Fourier modes.
@@ -74,16 +74,16 @@ ky = (2 * pi / L) * [0:N/2-1, -N/2:-1];
 assert(abs(x(2) - x(1) - dx) < 10 * eps(dx), ...
     'Periodic grid spacing mismatch.');
 
-%% Shared initial conditions for all fixed-lag test sets.
+%% Shared initial conditions for all fixed-time test sets.
 initial_conditions = zeros(n_test_trajectories, N, N);
 for traj_idx = 1:n_test_trajectories
     initial_conditions(traj_idx, :, :) = ...
         generate_random_initial_condition(N, n_modes, 1.0);
 end
 
-%% Generate one file per fixed lag.
-for lag_idx = 1:numel(fixed_lags)
-    fixed_dt = fixed_lags(lag_idx);
+%% Generate one file per fixed value of dt.
+for dt_idx = 1:numel(fixed_dt_values)
+    fixed_dt = fixed_dt_values(dt_idx);
     dt = fixed_dt * ones(n_test_trajectories, test_steps);
     trajectories = zeros(n_test_trajectories, N, N, 1, test_steps + 1);
 
@@ -103,9 +103,9 @@ for lag_idx = 1:numel(fixed_lags)
         end
     end
 
-    out_name = sprintf('test_data_fixed_dt_%s.mat', lag_to_token(fixed_dt));
+    out_name = sprintf('test_data_fixed_dt_%s.mat', dt_to_token(fixed_dt));
     out_path = fullfile(output_dir, out_name);
-    generator_seed = fixed_lag_seed;
+    generator_seed = fixed_time_seed;
     save(out_path, 'coordinates', 'dt', 'trajectories', 'generator_seed', '-v7');
 
     assert_shape(size(coordinates), [N, N, 2], 'coordinates');
@@ -116,10 +116,10 @@ for lag_idx = 1:numel(fixed_lags)
     fprintf('Saved %s\n', out_path);
 end
 
-fprintf('\nFixed-lag extrapolation data generation complete.\n');
+fprintf('\nFixed-time extrapolation data generation complete.\n');
 
 %% Local helper functions
-function token = lag_to_token(value)
+function token = dt_to_token(value)
     token = strrep(sprintf('%.6g', value), '.', 'p');
     token = strrep(token, '-', 'm');
 end
