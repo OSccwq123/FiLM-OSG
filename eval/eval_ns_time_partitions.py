@@ -271,8 +271,8 @@ def summarize_pairs(seedwise_rows, baseline="fno", conditioned="fno_film"):
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Evaluate the manuscript NS partition-robustness metric using a shared "
-            "set of admissible partitions and ||U(T)|| as the spread denominator."
+            "Evaluate Navier--Stokes rollouts over a shared set of admissible "
+            "time partitions."
         )
     )
     parser.add_argument("--models", default="fno,fno_film")
@@ -283,7 +283,7 @@ def main():
     parser.add_argument("--tag", default="")
     parser.add_argument("--model-root", default=".")
     parser.add_argument("--data-dir", default=str(DEFAULT_DATA_DIR))
-    parser.add_argument("--save-dir", default="./eval_outputs_ns_partition_robustness_paper")
+    parser.add_argument("--save-dir", default="./eval_outputs_ns_time_partitions")
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--device", default=None)
     args = parser.parse_args()

@@ -59,9 +59,9 @@ figure used in the manuscript. Replace `0,1` with the GPU IDs available on the
 local machine.
 
 ```bash
-python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag original_burgers_core --dataset original --data-dir data
-python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag original_burgers_core --dataset original --data-dir data --save-dir eval_outputs_burgers_original_5seed
-python scripts/plot_burgers_rollout.py --direct-model runs_burgers_fno_seed2_original_burgers_core/model --film-model runs_burgers_fno_film_seed2_original_burgers_core/model --data data/BurgersOSG_test.mat --sample -1 --steps 6,20 --out paper_figures/burgers_rollout.pdf
+python scripts/launch_burgers_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_main --dataset original --data-dir data
+python eval/eval_burgers_fno.py --models fno,fno_film --seeds 0,1,2,3,4 --tag burgers_main --dataset original --data-dir data --save-dir results/burgers_main
+python scripts/plot_burgers_rollout.py --direct-model runs_burgers_fno_seed2_burgers_main/model --film-model runs_burgers_fno_film_seed2_burgers_main/model --data data/BurgersOSG_test.mat --sample -1 --steps 6,20 --out paper_figures/burgers_rollout.pdf
 ```
 
 Each pair uses the same data, FNO configuration, training settings, and seed;

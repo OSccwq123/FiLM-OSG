@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TRAIN_SCRIPT = REPO_ROOT / "train" / "train_ns_extra_backbones.py"
+TRAIN_SCRIPT = REPO_ROOT / "train" / "run_ns_extra_backbones.py"
 DEFAULT_MODELS = ("uno", "uno_film", "transolver", "transolver_film")
 DEFAULT_SEEDS = (0, 1, 2)
 

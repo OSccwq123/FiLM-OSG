@@ -120,7 +120,7 @@ The partition experiment evaluates the main checkpoints at terminal times
 `20,40,60,80` using the shared set of admissible partitions from the paper.
 
 ```bash
-python eval/eval_ns_partition_robustness_paper.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_main --model-root . --data-dir data --save-dir results/ns_partitions
+python eval/eval_ns_time_partitions.py --models fno,fno_film --seeds 0,1,2,3,4 --tag ns_main --model-root . --data-dir data --save-dir results/ns_partitions
 ```
 
 The input-concatenation tuning table contains the main width-20,
@@ -154,10 +154,10 @@ for model_seed in 0 1 2 3 4; do
   python eval/eval_evolution_time_sensitivity.py --benchmark navier_stokes --model-seed "$model_seed" --direct-model "runs_ns_fno_seed${model_seed}_ns_main/model" --film-model "runs_ns_fno_film_seed${model_seed}_ns_main/model" --data data/VorticityOSG_test.mat --samples 200 --fd-eps 0.01 --out-dir "eval_outputs_evolution_time_sensitivity/ns_seed${model_seed}_layerwise"
 done
 
-python scripts/summarize_evolution_time_sensitivity.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_evolution_time_sensitivity/burgers_original_5seed_summary
-python scripts/summarize_evolution_time_sensitivity.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ad_5seed_summary
-python scripts/summarize_evolution_time_sensitivity.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ns_5seed_summary
-python scripts/summarize_evolution_time_sensitivity_scalars.py --root eval_outputs_evolution_time_sensitivity --seeds 0,1,2,3,4 --out-dir eval_outputs_evolution_time_sensitivity/scalar_summary
+python scripts/summarize_evolution_time_spectra.py --run-prefix burgers_original_seed --retained-modes 10 --out-dir eval_outputs_evolution_time_sensitivity/burgers_original_5seed_summary
+python scripts/summarize_evolution_time_spectra.py --run-prefix ad_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ad_5seed_summary
+python scripts/summarize_evolution_time_spectra.py --run-prefix ns_seed --retained-modes 12 --radial-band --out-dir eval_outputs_evolution_time_sensitivity/ns_5seed_summary
+python scripts/summarize_evolution_time_scalars.py --root eval_outputs_evolution_time_sensitivity --seeds 0,1,2,3,4 --out-dir eval_outputs_evolution_time_sensitivity/scalar_summary
 python scripts/plot_evolution_time_sensitivity.py --input-dir eval_outputs_evolution_time_sensitivity --output-dir paper_figures
 ```
 
@@ -205,13 +205,13 @@ two OSG models.
 
 ```bash
 python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --batch-size 100 --problem-dim 1
-python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --save-dir results/pdebench_swe64
+python eval/eval_pdebench.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --save-dir results/pdebench_swe64
 
 python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff64 --data-dir data/pdebench_osg/reacdiff64 --batch-size 100 --problem-dim 2
-python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff64 --data-dir data/pdebench_osg/reacdiff64 --save-dir results/pdebench_reacdiff64
+python eval/eval_pdebench.py --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff64 --data-dir data/pdebench_osg/reacdiff64 --save-dir results/pdebench_reacdiff64
 
 python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff128 --data-dir data/pdebench_osg/reacdiff128 --batch-size 20 --problem-dim 2
-python eval/eval_pdebench_disjoint_fullstate.py --models fno,fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff128 --data-dir data/pdebench_osg/reacdiff128 --save-dir results/pdebench_reacdiff128
+python eval/eval_pdebench.py --models fno,fno_film --seeds 0,1,2,3,4 --tag pdebench_reacdiff128 --data-dir data/pdebench_osg/reacdiff128 --save-dir results/pdebench_reacdiff128
 ```
 
 Each converted sample contains one transition, so the relative errors are

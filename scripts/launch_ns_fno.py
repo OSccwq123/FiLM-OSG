@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TRAIN_SCRIPT = REPO_ROOT / "train" / "train_ns_one.py"
+TRAIN_SCRIPT = REPO_ROOT / "train" / "run_ns_fno.py"
 DEFAULT_MODELS = ("fno", "fno_film")
 DEFAULT_SEEDS = (0, 1, 2, 3, 4)
 
