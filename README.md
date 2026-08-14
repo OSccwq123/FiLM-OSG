@@ -45,7 +45,7 @@ default; another location can be passed with `--data-dir`.
 | Navier–Stokes | `VorticityOSG_train.mat` | `VorticityOSG_test.mat` |
 
 The Burgers and advection–diffusion data can be generated with the programs in
-`scripts/data_generation/`. The Navier–Stokes files follow the public DUE
+`data/generation/`. The Navier–Stokes files follow the public DUE
 benchmark format. Sources, array layouts, and generation instructions are
 described in [`data/README.md`](data/README.md). Large data files are not stored
 in this repository.
@@ -89,7 +89,7 @@ runs.
 | `film_osg/` | Models, datasets, losses, and training utilities |
 | `train/` | Training entry points |
 | `eval/` | Rollout evaluation and numerical diagnostics |
-| `scripts/data_generation/` | Benchmark generation and conversion |
+| `data/` | Data instructions, generation programs, and local benchmark files |
 | `scripts/` | Multi-run launchers, summaries, and plotting |
 | `profiling/` | Parameter counts and timing measurements |
 | `docs/` | Environment and complete reproduction instructions |

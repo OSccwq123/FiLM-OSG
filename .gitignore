@@ -35,6 +35,9 @@ docs/internal/
 
 # Generated datasets under data subdirectories
 /data/*/
+!/data/generation/
+!/data/generation/*.m
+!/data/generation/*.py
 !/data/.gitkeep
 
 # Transient single-file outputs

@@ -3,34 +3,33 @@
 Place benchmark `.mat` files in this directory. Active training and evaluation
 scripts default to this path and also accept `--data-dir` for alternate locations.
 
-This directory is intentionally a local data staging area: normal git commits
-should contain this README only, not generated `.mat` files. Data-generation
-sources live in `scripts/data_generation/`.
+Generated data remain local and are excluded from normal git commits. The
+programs used to generate or convert them are kept in `data/generation/`.
 
 ## Generation Scripts
 
 The repository includes the following generation scripts:
 
-- `scripts/data_generation/Burgers.m`: generates `BurgersOSG_train.mat` and
+- `data/generation/Burgers.m`: generates `BurgersOSG_train.mat` and
   `BurgersOSG_test.mat`.
-- `scripts/data_generation/convection_diffusion.m`: generates `train_data.mat`
+- `data/generation/convection_diffusion.m`: generates `train_data.mat`
   and `test_data.mat` for the 2D advection–diffusion benchmark.
-- `scripts/data_generation/convection_diffusion_fixed_time.m`: generates
+- `data/generation/convection_diffusion_fixed_time.m`: generates
   optional advection–diffusion test files at fixed evolution times outside the
   main training interval.
-- `scripts/data_generation/generate_burgers_sharp_osg.py`: generates the
+- `data/generation/generate_burgers_sharp_osg.py`: generates the
   sharp-front inviscid Burgers extension with conservative averaging.
-- `scripts/data_generation/convert_pdebench_to_osg.py`: forms the
+- `data/generation/convert_pdebench_to_osg.py`: forms the
   trajectory-disjoint PDEBench datasets with varying evolution times.
-- `scripts/data_generation/check_osg_mat_data.py`: checks the converted array
+- `data/generation/check_osg_mat_data.py`: checks the converted array
   shapes, coordinates, state values, and time intervals.
 
-The MATLAB generators write beside the scripts by default. Set the environment
+The MATLAB generators write to `data/` by default. Set the environment
 variable `FILM_OSG_OUTPUT_DIR` to write elsewhere. The Python sharp-front
 generator accepts `--out-dir` explicitly, for example:
 
 ```bash
-python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+python data/generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
 ```
 
 The fixed-time extrapolation script writes:

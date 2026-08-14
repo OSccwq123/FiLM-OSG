@@ -20,7 +20,7 @@ end
 
 output_dir = getenv('FILM_OSG_OUTPUT_DIR');
 if isempty(output_dir)
-    output_dir = script_dir;
+    output_dir = fileparts(script_dir);
 end
 if ~exist(output_dir, 'dir')
     mkdir(output_dir);

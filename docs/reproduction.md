@@ -19,12 +19,13 @@ the manuscript tables.
 
 ### Burgers and advection–diffusion
 
-The MATLAB programs write to `data/` when `FILM_OSG_OUTPUT_DIR` is set:
+The MATLAB programs write to `data/` by default. The environment variable is
+shown here to make the destination explicit:
 
 ```matlab
 setenv('FILM_OSG_OUTPUT_DIR', fullfile(pwd, 'data'))
-run('scripts/data_generation/Burgers.m')
-run('scripts/data_generation/convection_diffusion.m')
+run('data/generation/Burgers.m')
+run('data/generation/convection_diffusion.m')
 ```
 
 The Navier–Stokes experiments use `VorticityOSG_train.mat` and
@@ -68,8 +69,8 @@ python scripts/plot_ns_rollout.py --direct results/ns_figure/fno_seed0_ns_main_f
 Generate the data with steep gradients before running these comparisons:
 
 ```bash
-python scripts/data_generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
-python scripts/data_generation/check_osg_mat_data.py --train data/burgers_sharp/BurgersSharpOSG_train.mat --test data/burgers_sharp/BurgersSharpOSG_test.mat --problem-dim 1d --expected-channels 1 --require-positive-dt
+python data/generation/generate_burgers_sharp_osg.py --out-dir data/burgers_sharp
+python data/generation/check_osg_mat_data.py --train data/burgers_sharp/BurgersSharpOSG_train.mat --test data/burgers_sharp/BurgersSharpOSG_test.mat --problem-dim 1d --expected-channels 1 --require-positive-dt
 ```
 
 The first comparison uses the steep-gradient data without projection; the
@@ -106,7 +107,7 @@ models from the main advection–diffusion experiment without retraining.
 
 ```matlab
 setenv('FILM_OSG_OUTPUT_DIR', fullfile(pwd, 'data'))
-run('scripts/data_generation/convection_diffusion_fixed_time.m')
+run('data/generation/convection_diffusion_fixed_time.m')
 ```
 
 ```bash
@@ -179,18 +180,18 @@ the manuscript. The same split and pair seeds are used at both
 reaction–diffusion resolutions.
 
 ```bash
-python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 --output-dir data/pdebench_osg/swe64 --prefix PDEBenchSWE64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
-python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/swe64/PDEBenchSWE64_train.mat --test data/pdebench_osg/swe64/PDEBenchSWE64_test.mat --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
+python data/generation/convert_pdebench_to_osg.py --input data/pdebench_raw/swe/2D_rdb_NA_NA.h5 --output-dir data/pdebench_osg/swe64 --prefix PDEBenchSWE64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
+python data/generation/check_osg_mat_data.py --train data/pdebench_osg/swe64/PDEBenchSWE64_train.mat --test data/pdebench_osg/swe64/PDEBenchSWE64_test.mat --problem-dim 2d --expected-channels 1 --expected-time 2 --require-positive-dt
 ln -sfn PDEBenchSWE64_train.mat data/pdebench_osg/swe64/train_data.mat
 ln -sfn PDEBenchSWE64_test.mat data/pdebench_osg/swe64/test_data.mat
 
-python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff64 --prefix PDEBenchReacDiff64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
-python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_train.mat --test data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+python data/generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff64 --prefix PDEBenchReacDiff64 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 2 --split-seed 0 --pair-seed 0
+python data/generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_train.mat --test data/pdebench_osg/reacdiff64/PDEBenchReacDiff64_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
 ln -sfn PDEBenchReacDiff64_train.mat data/pdebench_osg/reacdiff64/train_data.mat
 ln -sfn PDEBenchReacDiff64_test.mat data/pdebench_osg/reacdiff64/test_data.mat
 
-python scripts/data_generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff128 --prefix PDEBenchReacDiff128 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 1 --split-seed 0 --pair-seed 0
-python scripts/data_generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_train.mat --test data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
+python data/generation/convert_pdebench_to_osg.py --input data/pdebench_raw/reacdiff2d/2D_diff-react_NA_NA.h5 --output-dir data/pdebench_osg/reacdiff128 --prefix PDEBenchReacDiff128 --train-trajectories 800 --test-trajectories 200 --train-pairs 5000 --test-pairs 1000 --min-time-offset-steps 1 --max-time-offset-steps 20 --space-stride 1 --split-seed 0 --pair-seed 0
+python data/generation/check_osg_mat_data.py --train data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_train.mat --test data/pdebench_osg/reacdiff128/PDEBenchReacDiff128_test.mat --problem-dim 2d --expected-channels 2 --expected-time 2 --require-positive-dt
 ln -sfn PDEBenchReacDiff128_train.mat data/pdebench_osg/reacdiff128/train_data.mat
 ln -sfn PDEBenchReacDiff128_test.mat data/pdebench_osg/reacdiff128/test_data.mat
 ```
