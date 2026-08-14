@@ -52,22 +52,18 @@ commands are given in `docs/reproduction.md`.
 
 ## Expected Files
 
-| File | Benchmark | Approx. size |
-| --- | --- | ---: |
-| `BurgersOSG_train.mat` | Burgers train | 2.1 MB |
-| `BurgersOSG_test.mat` | Burgers test | 0.5 MB |
-| `burgers_sharp/BurgersSharpOSG_train.mat` | Burgers with steep gradients, train | generated locally |
-| `burgers_sharp/BurgersSharpOSG_test.mat` | Burgers with steep gradients, test | generated locally |
-| `train_data.mat` | Advection--diffusion train | 160.3 MB |
-| `test_data.mat` | Advection--diffusion test | 314.2 MB |
-| `VorticityOSG_train.mat` | Navier--Stokes train | 93.1 MB |
-| `VorticityOSG_test.mat` | Navier--Stokes test | 182.0 MB |
+| File | Benchmark |
+| --- | --- |
+| `BurgersOSG_train.mat` | Burgers train |
+| `BurgersOSG_test.mat` | Burgers test |
+| `burgers_sharp/BurgersSharpOSG_train.mat` | Burgers with steep gradients, train |
+| `burgers_sharp/BurgersSharpOSG_test.mat` | Burgers with steep gradients, test |
+| `train_data.mat` | Advection--diffusion train |
+| `test_data.mat` | Advection--diffusion test |
+| `VorticityOSG_train.mat` | Navier--Stokes train |
+| `VorticityOSG_test.mat` | Navier--Stokes test |
 
-The repository `.gitignore` keeps `*.mat` files out of normal git commits. Some
-files exceed GitHub's regular 100 MB file limit. Do not commit `.mat` files to
-the normal git repository. If distributing data through GitHub, use Git LFS or a
-GitHub Release asset after confirming that dataset redistribution permission is
-clear.
+The repository `.gitignore` keeps `*.mat` files out of normal git commits.
 
 The Navier--Stokes files should be obtained from the DUE benchmark release or a
 permitted mirror. The source and license attribution is recorded in `NOTICE`
