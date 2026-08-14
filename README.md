@@ -12,9 +12,9 @@ hidden features of an operator network.
 
 This repository contains the code for the numerical experiments in the
 FiLM-OSG manuscript. The main experiments compare FiLM-OSG-FNO with OSG-FNO
-using input concatenation on the Burgers, advection--diffusion, and
-two-dimensional incompressible Navier--Stokes equations. Additional scripts
-cover the global--local extension, PDEBench-derived data, other operator
+using input concatenation on the Burgers, advection–diffusion, and
+two-dimensional incompressible Navier–Stokes equations. Additional scripts
+cover the global–local extension, PDEBench-derived data, other operator
 backbones, and the diagnostics reported in the manuscript.
 
 ## Installation
@@ -30,8 +30,7 @@ python -m pip install -r requirements.txt
 ```
 
 Use the PyTorch build appropriate for the local hardware. The tested package
-versions and a short CPU check are given in
-[`docs/environment.md`](docs/environment.md).
+versions are given in [`docs/environment.md`](docs/environment.md).
 
 ## Data
 
@@ -42,11 +41,11 @@ default; another location can be passed with `--data-dir`.
 | --- | --- | --- |
 | Burgers | `BurgersOSG_train.mat` | `BurgersOSG_test.mat` |
 | Burgers with steep gradients | `burgers_sharp/BurgersSharpOSG_train.mat` | `burgers_sharp/BurgersSharpOSG_test.mat` |
-| Advection--diffusion | `train_data.mat` | `test_data.mat` |
-| Navier--Stokes | `VorticityOSG_train.mat` | `VorticityOSG_test.mat` |
+| Advection–diffusion | `train_data.mat` | `test_data.mat` |
+| Navier–Stokes | `VorticityOSG_train.mat` | `VorticityOSG_test.mat` |
 
-The Burgers and advection--diffusion data can be generated with the programs in
-`scripts/data_generation/`. The Navier--Stokes files follow the public DUE
+The Burgers and advection–diffusion data can be generated with the programs in
+`scripts/data_generation/`. The Navier–Stokes files follow the public DUE
 benchmark format. Sources, array layouts, and generation instructions are
 described in [`data/README.md`](data/README.md). Large data files are not stored
 in this repository.
@@ -56,7 +55,7 @@ in this repository.
 In the command-line interface, `fno` denotes OSG-FNO with input concatenation,
 and `fno_film` denotes FiLM-OSG-FNO. After preparing the Burgers data, the
 following commands reproduce the five-seed comparison and generate the rollout
-figure used in the manuscript. Replace `0,1` with the GPU ids available on the
+figure used in the manuscript. Replace `0,1` with the GPU IDs available on the
 local machine.
 
 ```bash
@@ -72,7 +71,7 @@ the treatment of the evolution time is the main architectural difference.
 
 [`docs/reproduction.md`](docs/reproduction.md) gives the commands for:
 
-- the five-seed Burgers, advection--diffusion, and Navier--Stokes comparisons;
+- the five-seed Burgers, advection–diffusion, and Navier–Stokes comparisons;
 - data generation and the additional Burgers and PDEBench experiments;
 - fixed-time, projection, Fourier, and time-partition diagnostics;
 - the U-NO-style and Transolver-style comparisons; and
