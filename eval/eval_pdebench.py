@@ -17,7 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from eval.diagnostics import band_error_metrics, spectrum_error_metrics
-from eval.eval_convdiff_fno import compute_metrics, model_path_for, safe_torch_load
+from eval.eval_convdiff_fno import compute_metrics, model_path_for, load_model
 
 
 def parse_list(text: str) -> list[str]:
@@ -37,7 +37,7 @@ def batched_prediction(model, x0, dt, device, batch_size):
 
 
 def evaluate(model_path, test_data, device, batch_size):
-    model = safe_torch_load(model_path, device)
+    model = load_model(model_path, device)
     model.eval()
     x0 = test_data["trajectories"][..., 0].astype(np.float32)
     dt = test_data["dt"].astype(np.float32)

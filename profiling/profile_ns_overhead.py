@@ -113,8 +113,6 @@ def build_model(model_name, vmin, vmax, tmin, tmax, config):
         osg_transolver2d_with_film,
     )
 
-    print("network_import_source = film_osg", flush=True)
-
     if model_name == "fno":
         return osg_fno2d(
             vmin=vmin,
@@ -489,13 +487,11 @@ def main():
 
     from film_osg.datasets.pde import pde_dataset_osg
 
-    print("dataset_import_source = film_osg", flush=True)
-
     os.makedirs(args.save_dir, exist_ok=True)
 
     set_seed(args.seed)
 
-    # Use a FNO-compatible config only for loading the same NS data.
+    # Load the shared Navier--Stokes training data.
     load_config = make_config(
         model_name="fno",
         save_path="./profile_tmp_loader",

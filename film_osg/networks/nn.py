@@ -1,4 +1,4 @@
-"""Base neural-network utilities for FiLM-OSG reproducibility experiments.
+"""Base neural-network utilities for FiLM-OSG experiments.
 
 This file is derived from AI4Equations/DUE:
 https://github.com/AI4Equations/due

@@ -39,7 +39,7 @@ def parse_str_list(text):
     return [x.strip() for x in text.split(",") if x.strip()]
 
 
-def safe_torch_load(model_path, device):
+def load_model(model_path, device):
     return torch.load(model_path, map_location=device, weights_only=False)
 
 
@@ -104,7 +104,7 @@ def evaluate_one_model(
     if not path.is_file():
         raise FileNotFoundError(f"Missing model: {path}")
 
-    model = safe_torch_load(path, device)
+    model = load_model(path, device)
     model.eval()
 
     x0 = test_data["trajectories"][..., 0].astype(np.float32)

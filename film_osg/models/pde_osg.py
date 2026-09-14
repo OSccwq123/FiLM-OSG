@@ -122,7 +122,7 @@ class PDE_osg(PDE):
                     xx = xx.to(self.device)
                     yy = yy.to(self.device)
                     
-                    pred = self.mynet(xx) #(batch_size, output_dim)
+                    pred = self.mynet(xx)
                         
                     data_loss = self.loss_func(yy, pred)
                     if self.hf_weight > 0.0:
@@ -145,7 +145,7 @@ class PDE_osg(PDE):
                     uu = uu.view(-1,*self.trainY.shape[1:]).to(self.device)
                     tt = tt.view(-1,*self.trainY.shape[1:-1], 3).to(self.device)
                     
-                    pred    = self.mynet(xx) #(batch_size, output_dim)
+                    pred    = self.mynet(xx)
                     pred01  = self.mynet(torch.cat((uu, tt[...,0:1]),dim=-1))
                     pred012 = self.mynet(torch.cat((pred01, tt[...,1:2]),dim=-1))
                     pred02  = self.mynet(torch.cat((uu, tt[...,1:2]),dim=-1))

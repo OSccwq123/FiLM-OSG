@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def safe_torch_load(path: Path, device: torch.device):
+def load_model(path: Path, device: torch.device):
     return torch.load(path, map_location=device, weights_only=False)
 
 
@@ -109,7 +109,10 @@ def sample_pairs(data: dict, model, count: int, seed: int, fd_eps: float):
     all_delta = encode_dt(model, all_dt)
     valid = np.flatnonzero(np.abs(all_delta) <= 1.0 - 2.0 * fd_eps)
     if count > len(valid):
-        raise ValueError(f"Requested {count} pairs but only {len(valid)} are FD-safe")
+        raise ValueError(
+            f"Requested {count} pairs, but only {len(valid)} keep both finite-difference points "
+            "within the training time interval."
+        )
     rng = np.random.default_rng(seed)
     chosen = rng.choice(valid, size=count, replace=False)
     states = np.stack(
@@ -244,8 +247,8 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    direct = safe_torch_load(args.direct_model, device).to(device)
-    film = safe_torch_load(args.film_model, device).to(device)
+    direct = load_model(args.direct_model, device).to(device)
+    film = load_model(args.film_model, device).to(device)
     data = loadmat(args.data)
 
     states_np, delta_np, dt_np = sample_pairs(data, direct, args.samples, args.sample_seed, args.fd_eps)

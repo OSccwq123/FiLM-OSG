@@ -60,7 +60,7 @@ def make_time_encoder(time_width: int, film_channels):
         torch.nn.Linear(time_width, total),
     )
 
-    # Zero initialization makes the FiLM path start close to identity:
+    # Zero initialization gives identity FiLM modulation:
     # gamma = 1 + 0.1 * raw_gamma, beta = 0.1 * raw_beta.
     torch.nn.init.zeros_(enc[-1].weight)
     torch.nn.init.zeros_(enc[-1].bias)

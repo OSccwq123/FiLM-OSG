@@ -171,7 +171,7 @@ class osg_fno2d(nn):
 
 
 class vt_fno2d(osg_fno2d):
-    """Variable-time FNO baseline without OSG outer-increment structure."""
+    """Input-concatenation FNO for single-step state prediction."""
 
     def forward(self, x):
         x = self.en(x)
@@ -311,7 +311,7 @@ class osg_fno2d_with_film(nn):
         return y.numpy()
 
 class vt_fno2d_with_film(osg_fno2d_with_film):
-    """Variable-time FiLM-FNO with direct next-state prediction."""
+    """FiLM-FNO for single-step state prediction."""
 
     def forward(self, x):
         x0 = x[..., :-1]

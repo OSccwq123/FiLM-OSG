@@ -199,9 +199,10 @@ ln -sfn PDEBenchReacDiff128_test.mat data/pdebench_osg/reacdiff128/test_data.mat
 On systems without symbolic links, copy each generated file to the indicated
 `train_data.mat` or `test_data.mat` name instead.
 
-The `64 x 64` experiments use batch size 100 and include the two direct-time
-controls. The `128 x 128` experiment uses batch size 20 and compares only the
-two OSG models.
+The `64 x 64` experiments use batch size 100 and include the FNO and FiLM-FNO
+single-step models. In the commands below, these models use the identifiers
+`vt_fno` and `vt_fno_film`, respectively. The `128 x 128` experiment uses batch
+size 20 and compares only the two OSG models.
 
 ```bash
 python scripts/launch_convdiff_fno.py --gpus 0,1 --models fno,fno_film,vt_fno,vt_fno_film --seeds 0,1,2,3,4 --tag pdebench_swe64 --data-dir data/pdebench_osg/swe64 --batch-size 100 --problem-dim 1

@@ -21,7 +21,7 @@ from eval.eval_convdiff_fno import (  # noqa: E402
     paired_comparison,
     parse_int_list,
     parse_str_list,
-    safe_torch_load,
+    load_model,
     summarize_metric_dicts,
     write_csv,
 )
@@ -65,7 +65,7 @@ def evaluate_model(
     if not path.is_file():
         raise FileNotFoundError(f"Missing model: {path}")
 
-    model = safe_torch_load(path, device)
+    model = load_model(path, device)
     model.eval()
     x0 = test_data["trajectories"][..., 0].astype(np.float32)
     dt = test_data["dt"].astype(np.float32)

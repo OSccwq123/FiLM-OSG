@@ -26,7 +26,7 @@ def parse_str_list(text):
     return [value.strip() for value in text.split(",") if value.strip()]
 
 
-def safe_torch_load(model_path, device):
+def load_model(model_path, device):
     import torch
     return torch.load(model_path, map_location=device, weights_only=False)
 
@@ -314,7 +314,7 @@ def main():
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Missing model: {path}")
 
-            model = safe_torch_load(path, args.device)
+            model = load_model(path, args.device)
             model.eval()
             for terminal_time in horizons:
                 if terminal_time >= trajectories.shape[-1]:

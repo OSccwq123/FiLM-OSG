@@ -1,4 +1,4 @@
-"""PDE training wrapper for FiLM-OSG reproducibility experiments.
+"""PDE training wrapper for FiLM-OSG experiments.
 
 This file is derived from AI4Equations/DUE:
 https://github.com/AI4Equations/due
@@ -61,7 +61,7 @@ class PDE:
                 
                 pred = torch.zeros_like(yy)
                 for t in range(self.multi_steps):
-                    pred[...,t] = self.mynet(xx) #(batch_size, output_dim)
+                    pred[...,t] = self.mynet(xx)
                     xx   = torch.cat((xx[...,1:], pred[...,t:t+1]), -1)
                 
                 loss       = self.loss_func(yy, pred)

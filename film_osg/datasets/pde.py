@@ -24,16 +24,12 @@ class pde_dataset_osg():
         try:
             data = loadmat(file_path_train)
         except NotImplementedError:
-            print("Your mat file is too large. Be patient.")
             import mat73
             data = mat73.loadmat(file_path_train)
 
         dt = data["dt"]
-        try:
-            coords = data["coordinates"]
-            data = data["trajectories"]
-        except Exception:
-            raise ValueError("Please name your dataset as trajectories.")
+        coords = data["coordinates"]
+        data = data["trajectories"]
         assert len(data.shape) >= 4
 
         if self.problem_type == "1d_regular":
